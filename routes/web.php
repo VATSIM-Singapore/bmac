@@ -9,6 +9,7 @@ use App\Http\Controllers\Faq\FaqAdminController;
 use App\Http\Controllers\Booking\BookingController;
 use App\Http\Controllers\Event\EventAdminController;
 use App\Http\Controllers\Airport\AirportAdminController;
+use App\Http\Controllers\Airline\AirlineAdminController;
 use App\Http\Controllers\Booking\BookingAdminController;
 use App\Http\Controllers\AirportLink\AirportLinkAdminController;
 use App\Http\Controllers\EventLink\EventLinkAdminController;
@@ -34,6 +35,9 @@ Route::group(['as' => 'admin.', 'prefix' => 'admin', 'middleware' => 'auth.isAdm
     // Airports
     Route::post('airports/destroy-unused', [AirportAdminController::class, 'destroyUnused'])->name('airports.destroyUnused');
     Route::resource('airports', AirportAdminController::class);
+
+    // Airlines
+    Route::resource('airlines', AirlineAdminController::class);
 
     // AirportLinks
     Route::resource('airportLinks', AirportLinkAdminController::class)->except(['show']);

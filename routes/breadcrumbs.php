@@ -35,6 +35,30 @@ Breadcrumbs::for('admin.airports.edit', function ($trail, $airport) {
     $trail->push('Edit Airport', route('admin.airports.edit', $airport));
 });
 
+// Home > Admin > Airlines
+Breadcrumbs::for('admin.airlines.index', function ($trail) {
+    $trail->parent('admin');
+    $trail->push('Airlines', route('admin.airlines.index'));
+});
+
+// Home > Admin > Airlines > New
+Breadcrumbs::for('admin.airlines.create', function ($trail) {
+    $trail->parent('admin.airlines.index');
+    $trail->push('New', route('admin.airlines.create'));
+});
+
+// Home > Admin > Airlines > [Airline]
+Breadcrumbs::for('admin.airlines.show', function ($trail, $airline) {
+    $trail->parent('admin.airlines.index');
+    $trail->push($airline->name . ' [' . $airline->icao . ']', route('admin.airlines.show', $airline));
+});
+
+// Home > Admin > Airlines > [Airline] > Edit Airline
+Breadcrumbs::for('admin.airlines.edit', function ($trail, $airline) {
+    $trail->parent('admin.airlines.show', $airline);
+    $trail->push('Edit Airline', route('admin.airlines.edit', $airline));
+});
+
 // Home > Admin > Airport Links
 Breadcrumbs::for('admin.airportLinks.index', function ($trail) {
     $trail->parent('admin');

@@ -22,6 +22,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
  * @property BookingStatus $status
  * @property bool $is_editable
  * @property int|null $user_id
+ * @property int|null $airline_id
  * @property string|null $callsign
  * @property string|null $acType
  * @property string|null $selcal
@@ -41,6 +42,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
  * @property-read bool $has_received_final_information_email
  * @property-write mixed $actype
  * @property-read \App\Models\User|null $user
+ * @property-read \App\Models\Airline|null $airline
  * @method static \Database\Factories\BookingFactory factory($count = null, $state = [])
  * @method static \Illuminate\Database\Eloquent\Builder|Booking newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder|Booking newQuery()
@@ -149,6 +151,11 @@ class Booking extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class)->withDefault();
+    }
+
+    public function airline(): BelongsTo
+    {
+        return $this->belongsTo(Airline::class)->withDefault();
     }
 
     public function flights(): HasMany

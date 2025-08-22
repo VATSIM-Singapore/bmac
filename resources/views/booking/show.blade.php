@@ -38,6 +38,17 @@
                         <strong>{{ $booking->acType }}</strong>
                     </x-form-group>
 
+                    @if($booking->airline)
+                        <x-form-group :label="__('Airline')">
+                            <div class="d-flex align-items-center">
+                                @if($booking->airline->logo_url)
+                                    <img src="{{ $booking->airline->logo_url }}" alt="{{ $booking->airline->icao }} logo" style="max-height: 40px; max-width: 120px; margin-right: 10px;">
+                                @endif
+                                <strong>{{ $booking->airline->name }}</strong>
+                            </div>
+                        </x-form-group>
+                    @endif
+
                     @if ($booking->event->uses_times)
                         @if ($flight->ctot)
                             <x-form-group :label="__('CTOT')">

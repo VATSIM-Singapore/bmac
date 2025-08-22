@@ -46,7 +46,12 @@ class BookingController extends Controller
                     return view('booking.edit_multiflights', compact('booking'));
                 }
                 $flight = $booking->flights->first();
-                return view('booking.edit', compact('booking', 'flight'));
+                $booking->load('airline'); // Ensure airline relationship is loaded
+                $airlines = collect(['' => __('No airline')]);
+                foreach (\App\Models\Airline::all(['id', 'icao', 'name']) as $airline) {
+                    $airlines->put($airline->id, "$airline->icao | $airline->name");
+                }
+                return view('booking.edit', compact('booking', 'flight', 'airlines'));
             } else {
                 // Check if the booking has already been reserved
                 if ($booking->status == BookingStatus::RESERVED) {
@@ -107,7 +112,12 @@ class BookingController extends Controller
                             return view('booking.edit_multiflights', compact('booking'));
                         }
                         $flight = $booking->flights->first();
-                        return view('booking.edit', compact('booking', 'flight'));
+                        $booking->load('airline'); // Ensure airline relationship is loaded
+                        $airlines = collect(['' => __('No airline')]);
+                        foreach (\App\Models\Airline::all(['id', 'icao', 'name']) as $airline) {
+                            $airlines->put($airline->id, "$airline->icao | $airline->name");
+                        }
+                        return view('booking.edit', compact('booking', 'flight', 'airlines'));
                     } else {
                         flashMessage(
                             'danger',
@@ -132,10 +142,17 @@ class BookingController extends Controller
     {
         // This check should actually be in the policy, but is now here as a quick fix
         if ($booking->user_id === $request->user()->id) {
+            // Handle empty airline_id before processing
+            $airline_id = $request->airline_id;
+            if ($airline_id === '') {
+                $airline_id = null;
+            }
+            
             if ($booking->is_editable) {
                 $booking->fill([
                     'callsign' => $request->callsign,
-                    'acType' => $request->acType
+                    'acType' => $request->acType,
+                    'airline_id' => $airline_id
                 ]);
             }
 

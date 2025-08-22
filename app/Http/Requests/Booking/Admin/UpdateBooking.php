@@ -17,6 +17,7 @@ class UpdateBooking extends Request
             'is_editable' => 'required|boolean',
             'callsign' => 'nullable|alpha_num|max:7',
             'acType' => 'nullable|alpha_num|between:3,4',
+            'airline_id' => 'nullable|exists:airlines,id',
             'ctot' => 'present|nullable|date_format:H:i',
             'eta' => 'present|nullable|date_format:H:i',
             'dep' => 'nullable|exists:airports,id',
@@ -41,6 +42,7 @@ class UpdateBooking extends Request
             'is_editable' => __('Editable?'),
             'callsign' => __('Callsign'),
             'acType' => __('Aircraft code'),
+            'airline_id' => __('Airline'),
             'ctot' => __('CTOT'),
             'eta' => __('ETA'),
             'dep' => __('Departure airport'),
@@ -52,4 +54,5 @@ class UpdateBooking extends Request
             'notify_user' => __('Notify user')
         ];
     }
+
 }

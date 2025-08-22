@@ -33,30 +33,31 @@ class Bookings extends Component
         $filter = $this->filter;
         // @TODO Check should actually be in a policy
         if ($this->event->is_online || auth()->check() && auth()->user()->isAdmin) {
-            $this->bookings = $this->event->bookings()
-                ->with([
-                    'event',
-                    'user',
-                    'flights' => function ($query) use ($filter) {
-                        switch ($filter) {
-                            case 'departures':
-                                $query->where('dep', $this->event->dep)
-                                    ->orderBy('ctot');
-                                break;
-                            case 'arrivals':
-                                $query->where('arr', $this->event->arr)
-                                    ->orderBy('eta');
-                                break;
-                            default:
-                                $query->orderBy('eta')
-                                    ->orderBy('ctot');
-                        }
-                    },
-                    'flights.airportDep',
-                    'flights.airportArr',
-                ])
-                ->withCount('flights')
-                ->get();
+                    $this->bookings = $this->event->bookings()
+            ->with([
+                'event',
+                'user',
+                'airline',
+                'flights' => function ($query) use ($filter) {
+                    switch ($filter) {
+                        case 'departures':
+                            $query->where('dep', $this->event->dep)
+                                ->orderBy('ctot');
+                            break;
+                        case 'arrivals':
+                            $query->where('arr', $this->event->arr)
+                                ->orderBy('eta');
+                            break;
+                        default:
+                            $query->orderBy('eta')
+                                ->orderBy('ctot');
+                    }
+                },
+                'flights.airportDep',
+                'flights.airportArr',
+            ])
+            ->withCount('flights')
+            ->get();
         } else {
             abort_unless(auth()->check() && auth()->user()->isAdmin, 404);
         }

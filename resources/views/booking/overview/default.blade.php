@@ -8,6 +8,7 @@
         @endif
         <th scope="row">Callsign</th>
         <th scope="row">Aircraft</th>
+        <th scope="row">Airline</th>
         <th scope="row">Book | Available until {{ $event->endBooking->format('d-m-Y H:i') }}z</th>
         @if (auth()->check() && auth()->user()->isAdmin && $event->endEvent >= now())
             <th colspan="3" scope="row">Admin actions</th>
@@ -40,6 +41,18 @@
                 {{ $booking->formatted_callsign }}</td>
             <td class="{{ auth()->check() && auth()->user()->use_monospace_font ? 'text-monospace' : '' }}">
                 {{ $booking->formatted_actype }}</td>
+            <td>
+                @if($booking->airline)
+                    <div class="d-flex align-items-center">
+                        @if($booking->airline->logo_url)
+                            <img src="{{ $booking->airline->logo_url }}" alt="{{ $booking->airline->icao }} logo" style="max-height: 20px; max-width: 60px; margin-right: 5px;">
+                        @endif
+                        <span>{{ $booking->airline->name }}</span>
+                    </div>
+                @else
+                    <span class="text-muted">-</span>
+                @endif
+            </td>
             <td>
                 {{-- Check if booking has been booked --}}
                 @if ($booking->status == \App\Enums\BookingStatus::BOOKED)

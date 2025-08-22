@@ -19,6 +19,7 @@ class StoreBooking extends Request
             'is_editable' => 'required|boolean',
             'callsign' => 'nullable|alpha_num|between:4,7',
             'acType' => 'nullable|alpha_num|between:3,4',
+            'airline_id' => 'nullable|exists:airlines,id',
             'ctot' => 'sometimes|nullable',
             'eta' => 'sometimes|nullable',
             'route' => 'sometimes|nullable',
@@ -45,6 +46,7 @@ class StoreBooking extends Request
             'is_editable' => __('Editable?'),
             'callsign' => __('Callsign'),
             'acType' => __('Aircraft code'),
+            'airline_id' => __('Airline'),
             'ctot' => __('CTOT'),
             'eta' => __('ETA'),
             'route' => __('Route'),
@@ -57,4 +59,5 @@ class StoreBooking extends Request
             'notes' => __('Notes'),
         ];
     }
+
 }

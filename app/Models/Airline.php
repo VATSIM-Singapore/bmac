@@ -5,6 +5,7 @@ namespace App\Models;
 use Spatie\Activitylog\LogOptions;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
@@ -20,6 +21,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \Spatie\Activitylog\Models\Activity> $activities
  * @property-read int|null $activities_count
  * @property-read string $logo_url
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Booking> $bookings
+ * @property-read int|null $bookings_count
  * @method static \Database\Factories\AirlineFactory factory($count = null, $state = [])
  * @method static \Illuminate\Database\Eloquent\Builder|Airline newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder|Airline newQuery()
@@ -72,5 +75,10 @@ class Airline extends Model
     public function getRouteKeyName(): string
     {
         return 'icao';
+    }
+
+    public function bookings(): HasMany
+    {
+        return $this->hasMany(Booking::class);
     }
 }

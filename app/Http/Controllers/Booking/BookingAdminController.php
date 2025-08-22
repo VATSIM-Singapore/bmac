@@ -42,11 +42,22 @@ class BookingAdminController extends AdminController
                 return "$airport->icao | $airport->name | $airport->iata";
             });
 
-        return view('booking.admin.create', compact('event', 'airports', 'bulk'));
+        $airlines = collect(['' => __('No airline')]);
+        foreach (\App\Models\Airline::all(['id', 'icao', 'name']) as $airline) {
+            $airlines->put($airline->id, "$airline->icao | $airline->name");
+        }
+
+        return view('booking.admin.create', compact('event', 'airports', 'airlines', 'bulk'));
     }
 
     public function store(StoreBooking $request): RedirectResponse
     {
+        // Handle empty airline_id before processing
+        $data = $request->all();
+        if (isset($data['airline_id']) && $data['airline_id'] === '') {
+            $data['airline_id'] = null;
+        }
+        
         $event = Event::whereKey($request->id)->first();
         if ($request->bulk) {
             $event_start = Carbon::createFromFormat(
@@ -88,6 +99,7 @@ class BookingAdminController extends AdminController
                 'is_editable' => $request->is_editable,
                 'callsign' => $request->callsign,
                 'acType' => $request->acType,
+                'airline_id' => $data['airline_id'],
             ]);
 
             $booking->event()->associate($request->id)->save();
@@ -127,8 +139,15 @@ class BookingAdminController extends AdminController
                     /** @var Airport $airport */
                     return "$airport->icao | $airport->name | $airport->iata";
                 });
+
+            $airlines = collect(['' => __('No airline')]);
+            foreach (\App\Models\Airline::all(['id', 'icao', 'name']) as $airline) {
+                $airlines->put($airline->id, "$airline->icao | $airline->name");
+            }
+
             $flight = $booking->flights()->first();
-            return view('booking.admin.edit', compact('booking', 'airports', 'flight'));
+            $booking->load('airline'); // Ensure airline relationship is loaded
+            return view('booking.admin.edit', compact('booking', 'airports', 'airlines', 'flight'));
         }
         flashMessage('danger', __('Danger'), __('Booking can no longer be edited'));
         return back();
@@ -136,6 +155,12 @@ class BookingAdminController extends AdminController
 
     public function update(UpdateBooking $request, Booking $booking): RedirectResponse
     {
+        // Handle empty airline_id before processing
+        $data = $request->all();
+        if (isset($data['airline_id']) && $data['airline_id'] === '') {
+            $data['airline_id'] = null;
+        }
+        
         $shouldSendEmail = false;
         if (!empty($booking->user) && $request->notify_user) {
             $shouldSendEmail = true;
@@ -146,6 +171,7 @@ class BookingAdminController extends AdminController
             'is_editable' => $request->is_editable,
             'callsign' => $request->callsign,
             'acType' => $request->acType,
+            'airline_id' => $data['airline_id'],
             'final_information_email_sent_at' => null
         ]);
 

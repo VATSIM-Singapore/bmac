@@ -23,6 +23,7 @@
 
                         <x-form-input name="callsign" :label="__('Callsign')" maxlength="7" />
                         <x-form-input name="acType" :label="__('Aircraft code')" minlength="3" maxlength="4" />
+                        <x-form-select name="airline_id" :label="__('Airline (optional)')" :options="$airlines" :placeholder="__('Choose airline...')" :value="$booking->airline_id" />
 
                         @bind($flight)
                         

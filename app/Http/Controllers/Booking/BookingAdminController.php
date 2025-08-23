@@ -24,6 +24,7 @@ use App\Http\Requests\Booking\Admin\RouteAssign;
 use App\Http\Requests\Booking\Admin\StoreBooking;
 use App\Http\Requests\Booking\Admin\UpdateBooking;
 use App\Http\Requests\Booking\Admin\ImportBookings;
+use App\Services\CachedDataService;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class BookingAdminController extends AdminController
@@ -36,16 +37,10 @@ class BookingAdminController extends AdminController
     public function create(Event $event, Request $request): View
     {
         $bulk = $request->bulk;
-        $airports = Airport::all(['id', 'icao', 'iata', 'name'])->keyBy('id')
-            ->map(function ($airport) {
-                /** @var Airport $airport */
-                return "$airport->icao | $airport->name | $airport->iata";
-            });
-
-        $airlines = collect(['' => __('No airline')]);
-        foreach (\App\Models\Airline::all(['id', 'icao', 'name']) as $airline) {
-            $airlines->put($airline->id, "$airline->icao | $airline->name");
-        }
+        $cachedDataService = new CachedDataService();
+        
+        $airports = $cachedDataService->getAirportsForSelect();
+        $airlines = $cachedDataService->getAirlinesForSelect();
 
         return view('booking.admin.create', compact('event', 'airports', 'airlines', 'bulk'));
     }
@@ -134,16 +129,10 @@ class BookingAdminController extends AdminController
     public function edit(Booking $booking): View|RedirectResponse
     {
         if ($booking->event->endEvent >= now()) {
-            $airports = Airport::all(['id', 'icao', 'iata', 'name'])->keyBy('id')
-                ->map(function ($airport) {
-                    /** @var Airport $airport */
-                    return "$airport->icao | $airport->name | $airport->iata";
-                });
-
-            $airlines = collect(['' => __('No airline')]);
-            foreach (\App\Models\Airline::all(['id', 'icao', 'name']) as $airline) {
-                $airlines->put($airline->id, "$airline->icao | $airline->name");
-            }
+            $cachedDataService = new CachedDataService();
+            
+            $airports = $cachedDataService->getAirportsForSelect();
+            $airlines = $cachedDataService->getAirlinesForSelect();
 
             $flight = $booking->flights()->first();
             $booking->load('airline'); // Ensure airline relationship is loaded

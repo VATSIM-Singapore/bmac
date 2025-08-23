@@ -12,6 +12,7 @@ use App\Events\BookingCancelled;
 use App\Events\BookingConfirmed;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Booking\UpdateBooking;
+use App\Services\CachedDataService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 
@@ -47,10 +48,8 @@ class BookingController extends Controller
                 }
                 $flight = $booking->flights->first();
                 $booking->load('airline'); // Ensure airline relationship is loaded
-                $airlines = collect(['' => __('No airline')]);
-                foreach (\App\Models\Airline::all(['id', 'icao', 'name']) as $airline) {
-                    $airlines->put($airline->id, "$airline->icao | $airline->name");
-                }
+                $cachedDataService = new CachedDataService();
+                $airlines = $cachedDataService->getAirlinesForSelect();
                 return view('booking.edit', compact('booking', 'flight', 'airlines'));
             } else {
                 // Check if the booking has already been reserved
@@ -113,10 +112,8 @@ class BookingController extends Controller
                         }
                         $flight = $booking->flights->first();
                         $booking->load('airline'); // Ensure airline relationship is loaded
-                        $airlines = collect(['' => __('No airline')]);
-                        foreach (\App\Models\Airline::all(['id', 'icao', 'name']) as $airline) {
-                            $airlines->put($airline->id, "$airline->icao | $airline->name");
-                        }
+                        $cachedDataService = new CachedDataService();
+                        $airlines = $cachedDataService->getAirlinesForSelect();
                         return view('booking.edit', compact('booking', 'flight', 'airlines'));
                     } else {
                         flashMessage(

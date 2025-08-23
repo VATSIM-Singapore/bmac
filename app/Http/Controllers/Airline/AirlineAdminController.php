@@ -9,6 +9,7 @@ use Illuminate\Http\RedirectResponse;
 use App\Http\Controllers\AdminController;
 use App\Http\Requests\Airline\Admin\StoreAirline;
 use App\Http\Requests\Airline\Admin\UpdateAirline;
+use App\Services\CachedDataService;
 use Illuminate\Support\Facades\Storage;
 
 class AirlineAdminController extends AdminController
@@ -46,6 +47,11 @@ class AirlineAdminController extends AdminController
         unset($data['logo']);
         
         $airline = Airline::create($data);
+        
+        // Clear airlines cache when new airline is added
+        $cachedDataService = new CachedDataService();
+        $cachedDataService->clearAirlinesCache();
+        
         flashMessage('success', __('Done'), __(':airline has been added!', ['airline' => "$airline->name [$airline->icao]"]));
         return to_route('admin.airlines.index');
     }
@@ -81,6 +87,11 @@ class AirlineAdminController extends AdminController
         unset($data['logo']);
         
         $airline->update($data);
+        
+        // Clear airlines cache when airline is updated
+        $cachedDataService = new CachedDataService();
+        $cachedDataService->clearAirlinesCache();
+        
         flashMessage('success', __('Done'), __(':airline has been updated!', ['airline' => "$airline->name [$airline->icao]"]));
 
         return to_route('admin.airlines.index');
@@ -94,6 +105,11 @@ class AirlineAdminController extends AdminController
         }
         
         $airline->delete();
+        
+        // Clear airlines cache when airline is deleted
+        $cachedDataService = new CachedDataService();
+        $cachedDataService->clearAirlinesCache();
+        
         flashMessage('success', __('Done'), __(':airline has been deleted!', ['airline' => "$airline->name [$airline->icao]"]));
 
         return redirect()->back();

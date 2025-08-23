@@ -41,16 +41,11 @@ class Bookings extends Component
                 'flights' => function ($query) use ($filter) {
                     switch ($filter) {
                         case 'departures':
-                            $query->where('dep', $this->event->dep)
-                                ->orderBy('ctot');
+                            $query->where('dep', $this->event->dep);
                             break;
                         case 'arrivals':
-                            $query->where('arr', $this->event->arr)
-                                ->orderBy('eta');
+                            $query->where('arr', $this->event->arr);
                             break;
-                        default:
-                            $query->orderBy('eta')
-                                ->orderBy('ctot');
                     }
                 },
                 'flights.airportDep',
@@ -60,6 +55,33 @@ class Bookings extends Component
             ->get();
         } else {
             abort_unless(auth()->check() && auth()->user()->isAdmin, 404);
+        }
+
+        // Sort bookings by flight times based on filter
+        if ($filter === 'departures') {
+            $this->bookings = $this->bookings->sortBy(function ($booking) {
+                $flight = $booking->flights->first();
+                return $flight && $flight->ctot ? $flight->ctot->timestamp : PHP_INT_MAX;
+            });
+        } elseif ($filter === 'arrivals') {
+            $this->bookings = $this->bookings->sortBy(function ($booking) {
+                $flight = $booking->flights->first();
+                return $flight && $flight->eta ? $flight->eta->timestamp : PHP_INT_MAX;
+            });
+        } else {
+            // Default sorting: first by CTOT, then by ETA
+            $this->bookings = $this->bookings->sortBy(function ($booking) {
+                $flight = $booking->flights->first();
+                if (!$flight) return PHP_INT_MAX;
+                
+                // Use CTOT if available, otherwise ETA, otherwise max value
+                if ($flight->ctot) {
+                    return $flight->ctot->timestamp;
+                } elseif ($flight->eta) {
+                    return $flight->eta->timestamp;
+                }
+                return PHP_INT_MAX;
+            });
         }
 
         $this->booked = $this->bookings->where('status', BookingStatus::BOOKED)->count();

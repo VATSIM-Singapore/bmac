@@ -159,7 +159,8 @@ class Event extends Model
     {
         return in_array($this->event_type_id, [
             \App\Enums\EventType::FLYIN->value,
-            \App\Enums\EventType::GROUPFLIGHT->value
+            \App\Enums\EventType::GROUPFLIGHT->value,
+            \App\Enums\EventType::REALFLIGHTOPS->value
         ]);
     }
 }

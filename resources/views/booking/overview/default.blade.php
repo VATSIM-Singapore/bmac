@@ -1,14 +1,13 @@
 <thead>
     <tr>
-        <th scope="row">From</th>
-        <th scope="row">To</th>
         @if ($event->uses_times)
             <th scope="row"><abbr title="Calculated Take Off Time">CTOT</abbr></th>
             <th scope="row"><abbr title="Estimated Time of Arrival">ETA</abbr></th>
         @endif
-        <th scope="row">Callsign</th>
+        <th scope="row">From</th>
+        <th scope="row">To</th>
+        <th scope="row">Flight</th>
         <th scope="row">Aircraft</th>
-        <th scope="row">Airline</th>
         <th scope="row">Book | Available until {{ $event->endBooking->format('d-m-Y H:i') }}z</th>
         @if (auth()->check() && auth()->user()->isAdmin && $event->endEvent >= now())
             <th colspan="3" scope="row">Admin actions</th>
@@ -23,12 +22,6 @@
     @if ($flight)
         {{-- Check if flight belongs to the logged in user --}}
         <tr class="{{ auth()->check() && $booking->user_id == auth()->id() ? 'table-active' : '' }}">
-            <td>
-                {!! $flight->airportDep->fullName !!}
-            </td>
-            <td>
-                {!! $flight->airportArr->fullName !!}
-            </td>
             @if ($booking->event->uses_times)
                 <td>
                     {{ $flight->formattedCtot }}
@@ -37,22 +30,41 @@
                     {{ $flight->formattedEta }}
                 </td>
             @endif
+            <td>
+                <div class="d-flex align-items-center">
+                    <div>
+                        <div>{{ $flight->airportDep->icao }}</div>
+                        <small class="text-muted">{{ $flight->airportDep->name }}</small>
+                    </div>
+                </div>
+            </td>
+            <td>
+                <div class="d-flex align-items-center">
+                    <div>
+                        <div>{{ $flight->airportArr->icao }}</div>
+                        <small class="text-muted">{{ $flight->airportArr->name }}</small>
+                    </div>
+                </div>
+            </td>
             <td class="{{ auth()->check() && auth()->user()->use_monospace_font ? 'text-monospace' : '' }}">
-                {{ $booking->formatted_callsign }}</td>
+                <div class="d-flex align-items-top">
+                    @if($booking->airline && $booking->airline->logo_url)
+                        <img src="{{ $booking->airline->logo_url }}"
+                             alt="{{ $booking->airline->name }} logo"
+                             style="max-height: 20px; max-width: 60px; margin-right: 8px;">
+                    @endif
+                    <div>
+                        <div class="flight-number text-primary font-weight-bold">
+                            {{ $booking->formatted_callsign }}
+                        </div>
+                        @if($booking->airline)
+                            <small class="text-muted">{{ $booking->airline->name }}</small>
+                        @endif
+                    </div>
+                </div>
+            </td>
             <td class="{{ auth()->check() && auth()->user()->use_monospace_font ? 'text-monospace' : '' }}">
                 {{ $booking->formatted_actype }}</td>
-            <td>
-                @if($booking->airline)
-                    <div class="d-flex align-items-center">
-                        @if($booking->airline->logo_url)
-                            <img src="{{ $booking->airline->logo_url }}" alt="{{ $booking->airline->icao }} logo" style="max-height: 20px; max-width: 60px; margin-right: 5px;">
-                        @endif
-                        <span>{{ $booking->airline->name }}</span>
-                    </div>
-                @else
-                    <span class="text-muted">-</span>
-                @endif
-            </td>
             <td>
                 {{-- Check if booking has been booked --}}
                 @if ($booking->status == \App\Enums\BookingStatus::BOOKED)

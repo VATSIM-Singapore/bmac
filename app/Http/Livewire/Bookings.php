@@ -33,7 +33,7 @@ class Bookings extends Component
         $filter = $this->filter;
         // @TODO Check should actually be in a policy
         if ($this->event->is_online || auth()->check() && auth()->user()->isAdmin) {
-                    $this->bookings = $this->event->bookings()
+            $this->bookings = $this->event->bookings()
             ->with([
                 'event',
                 'user',
@@ -72,8 +72,10 @@ class Bookings extends Component
             // Default sorting: first by CTOT, then by ETA
             $this->bookings = $this->bookings->sortBy(function ($booking) {
                 $flight = $booking->flights->first();
-                if (!$flight) return PHP_INT_MAX;
-                
+                if (!$flight) {
+                    return PHP_INT_MAX;
+                }
+
                 // Use CTOT if available, otherwise ETA, otherwise max value
                 if ($flight->ctot) {
                     return $flight->ctot->timestamp;

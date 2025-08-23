@@ -33,7 +33,7 @@ class AirlineAdminController extends AdminController
     public function store(StoreAirline $request): RedirectResponse
     {
         $data = $request->validated();
-        
+
         // Handle logo upload
         if ($request->hasFile('logo')) {
             $file = $request->file('logo');
@@ -42,16 +42,16 @@ class AirlineAdminController extends AdminController
             $logoPath = $file->storeAs('airlines', $filename, 'public');
             $data['logo_path'] = $logoPath;
         }
-        
+
         // Remove logo field from data as it's not a database column
         unset($data['logo']);
-        
+
         $airline = Airline::create($data);
-        
+
         // Clear airlines cache when new airline is added
         $cachedDataService = new CachedDataService();
         $cachedDataService->clearAirlinesCache();
-        
+
         flashMessage('success', __('Done'), __(':airline has been added!', ['airline' => "$airline->name [$airline->icao]"]));
         return to_route('admin.airlines.index');
     }
@@ -69,7 +69,7 @@ class AirlineAdminController extends AdminController
     public function update(UpdateAirline $request, Airline $airline): RedirectResponse
     {
         $data = $request->validated();
-        
+
         // Handle logo upload
         if ($request->hasFile('logo')) {
             // Delete old logo if exists
@@ -82,16 +82,16 @@ class AirlineAdminController extends AdminController
             $logoPath = $file->storeAs('airlines', $filename, 'public');
             $data['logo_path'] = $logoPath;
         }
-        
+
         // Remove logo field from data as it's not a database column
         unset($data['logo']);
-        
+
         $airline->update($data);
-        
+
         // Clear airlines cache when airline is updated
         $cachedDataService = new CachedDataService();
         $cachedDataService->clearAirlinesCache();
-        
+
         flashMessage('success', __('Done'), __(':airline has been updated!', ['airline' => "$airline->name [$airline->icao]"]));
 
         return to_route('admin.airlines.index');
@@ -103,13 +103,13 @@ class AirlineAdminController extends AdminController
         if ($airline->logo_path) {
             Storage::disk('public')->delete($airline->logo_path);
         }
-        
+
         $airline->delete();
-        
+
         // Clear airlines cache when airline is deleted
         $cachedDataService = new CachedDataService();
         $cachedDataService->clearAirlinesCache();
-        
+
         flashMessage('success', __('Done'), __(':airline has been deleted!', ['airline' => "$airline->name [$airline->icao]"]));
 
         return redirect()->back();

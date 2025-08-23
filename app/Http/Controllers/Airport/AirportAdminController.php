@@ -33,11 +33,11 @@ class AirportAdminController extends AdminController
     public function store(StoreAirport $request): RedirectResponse
     {
         $airport = Airport::create($request->validated());
-        
+
         // Clear airports cache when new airport is added
         $cachedDataService = new CachedDataService();
         $cachedDataService->clearAirportsCache();
-        
+
         flashMessage('success', __('Done'), __(':airport has been added!', ['airport' => "$airport->name [$airport->icao | $airport->iata]"]));
         return to_route('admin.airports.index');
     }
@@ -55,11 +55,11 @@ class AirportAdminController extends AdminController
     public function update(UpdateAirport $request, Airport $airport): RedirectResponse
     {
         $airport->update($request->validated());
-        
+
         // Clear airports cache when airport is updated
         $cachedDataService = new CachedDataService();
         $cachedDataService->clearAirportsCache();
-        
+
         flashMessage('success', __('Done'), __(':airport has been updated!', ['airport' => "$airport->name [$airport->icao | $airport->iata]"]));
 
         return to_route('admin.airports.index');
@@ -69,11 +69,11 @@ class AirportAdminController extends AdminController
     {
         if ($airport->flightsDep->isEmpty() && $airport->flightsArr->isEmpty()) {
             $airport->delete();
-            
+
             // Clear airports cache when airport is deleted
             $cachedDataService = new CachedDataService();
             $cachedDataService->clearAirportsCache();
-            
+
             flashMessage('success', __('Done'), __(':airport has been deleted!', ['airport' => "$airport->name [$airport->icao | $airport->iata]"]));
 
             return redirect()->back();

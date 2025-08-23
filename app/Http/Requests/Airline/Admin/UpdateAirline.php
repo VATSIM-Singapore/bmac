@@ -13,8 +13,11 @@ class UpdateAirline extends Request
      */
     public function rules()
     {
+        $airline = $this->route('airline');
+        $airlineId = $airline instanceof \App\Models\Airline ? $airline->id : (string) $airline;
+
         return [
-            'icao' => 'required|string|size:3|unique:airlines,icao,' . $this->route('airline')->id,
+            'icao' => 'required|string|size:3|unique:airlines,icao,' . $airlineId,
             'name' => 'required|string|max:255',
             'logo' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ];

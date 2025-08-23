@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Booking;
 use Carbon\Carbon;
 use App\Models\Event;
 use App\Models\Flight;
-use App\Models\Airport;
 use App\Models\Booking;
 use Illuminate\View\View;
 use App\Enums\BookingStatus;
@@ -25,6 +24,7 @@ use App\Http\Requests\Booking\Admin\StoreBooking;
 use App\Http\Requests\Booking\Admin\UpdateBooking;
 use App\Http\Requests\Booking\Admin\ImportBookings;
 use App\Services\CachedDataService;
+use App\Services\RealFlightBookingValidator;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class BookingAdminController extends AdminController
@@ -38,7 +38,7 @@ class BookingAdminController extends AdminController
     {
         $bulk = $request->bulk;
         $cachedDataService = new CachedDataService();
-        
+
         $airports = $cachedDataService->getAirportsForSelect();
         $airlines = $cachedDataService->getAirlinesForSelect();
 
@@ -52,7 +52,7 @@ class BookingAdminController extends AdminController
         if (isset($data['airline_id']) && $data['airline_id'] === '') {
             $data['airline_id'] = null;
         }
-        
+
         $event = Event::whereKey($request->id)->first();
         if ($request->bulk) {
             $event_start = Carbon::createFromFormat(
@@ -121,6 +121,25 @@ class BookingAdminController extends AdminController
             }
 
             $booking->flights()->create($flightAttributes);
+
+            // Validate Real Flight Operations booking restrictions for admin
+            $flight = $booking->flights->first();
+            if ($flight) {
+                $validator = new RealFlightBookingValidator();
+                $validationResult = $validator->validateBooking($booking->user, $booking->event, $flight, true);
+
+                if (!$validationResult->isSuccess()) {
+                    if ($validationResult->confirmationMessage) {
+                        flashMessage('warning', __('Admin Override'), $validationResult->confirmationMessage);
+                    } else {
+                        flashMessage('danger', __('Booking Restricted'), $validationResult->errorMessage);
+                        // Delete the booking if validation fails
+                        $booking->delete();
+                        return to_route('bookings.event.index', $event);
+                    }
+                }
+            }
+
             flashMessage('success', __('Done'), __('Slot created'));
         }
         return to_route('bookings.event.index', $event);
@@ -130,7 +149,7 @@ class BookingAdminController extends AdminController
     {
         if ($booking->event->endEvent >= now()) {
             $cachedDataService = new CachedDataService();
-            
+
             $airports = $cachedDataService->getAirportsForSelect();
             $airlines = $cachedDataService->getAirlinesForSelect();
 
@@ -149,7 +168,7 @@ class BookingAdminController extends AdminController
         if (isset($data['airline_id']) && $data['airline_id'] === '') {
             $data['airline_id'] = null;
         }
-        
+
         $shouldSendEmail = false;
         if (!empty($booking->user) && $request->notify_user) {
             $shouldSendEmail = true;
@@ -209,6 +228,21 @@ class BookingAdminController extends AdminController
                 $changes->push(
                     ['name' => 'message', 'new' => $request->message]
                 );
+            }
+        }
+
+        // Validate Real Flight Operations booking restrictions for admin update
+        if ($booking->user) {
+            $validator = new RealFlightBookingValidator();
+            $validationResult = $validator->validateBooking($booking->user, $booking->event, $flight, true);
+
+            if (!$validationResult->isSuccess()) {
+                if ($validationResult->confirmationMessage) {
+                    flashMessage('warning', __('Admin Override'), $validationResult->confirmationMessage);
+                } else {
+                    flashMessage('danger', __('Booking Restricted'), $validationResult->errorMessage);
+                    return to_route('bookings.event.index', $booking->event);
+                }
             }
         }
 

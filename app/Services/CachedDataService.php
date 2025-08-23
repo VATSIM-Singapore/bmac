@@ -45,7 +45,7 @@ class CachedDataService
             return Cache::remember('airlines_for_select', 3600, function () {
                 $airlines = collect(['' => __('No airline')]);
                 foreach (Airline::all(['id', 'icao', 'name']) as $airline) {
-                    $airlines->put($airline->id, "$airline->icao | $airline->name");
+                    $airlines->put((string) $airline->id, "$airline->icao | $airline->name");
                 }
                 return $airlines;
             });
@@ -53,7 +53,7 @@ class CachedDataService
             // Fallback to database if cache fails
             $airlines = collect(['' => __('No airline')]);
             foreach (Airline::all(['id', 'icao', 'name']) as $airline) {
-                $airlines->put($airline->id, "$airline->icao | $airline->name");
+                $airlines->put((string) $airline->id, "$airline->icao | $airline->name");
             }
             return $airlines;
         }

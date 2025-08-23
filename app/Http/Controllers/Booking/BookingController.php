@@ -13,6 +13,7 @@ use App\Events\BookingConfirmed;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Booking\UpdateBooking;
 use App\Services\CachedDataService;
+use App\Services\RealFlightBookingValidator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 
@@ -96,6 +97,18 @@ class BookingController extends Controller
                 // Check if you are allowed to reserve the slot
                 if ($booking->event->startBooking <= now()) {
                     if ($booking->event->endBooking >= now()) {
+                        // Validate Real Flight Operations booking restrictions
+                        $flight = $booking->flights->first();
+                        if ($flight) {
+                            $validator = new RealFlightBookingValidator();
+                            $validationResult = $validator->validateBooking(auth()->user(), $booking->event, $flight);
+
+                            if (!$validationResult->isSuccess()) {
+                                flashMessage('danger', __('Booking Restricted'), $validationResult->errorMessage);
+                                return to_route('bookings.event.index', $booking->event);
+                            }
+                        }
+
                         activity()
                             ->by(auth()->user())
                             ->on($booking)
@@ -144,7 +157,7 @@ class BookingController extends Controller
             if ($airline_id === '') {
                 $airline_id = null;
             }
-            
+
             if ($booking->is_editable) {
                 $booking->fill([
                     'callsign' => $request->callsign,
@@ -161,6 +174,18 @@ class BookingController extends Controller
             }
 
             if ($booking->status == BookingStatus::RESERVED) {
+                // Validate Real Flight Operations booking restrictions on confirmation
+                $flight = $booking->flights->first();
+                if ($flight) {
+                    $validator = new RealFlightBookingValidator();
+                    $validationResult = $validator->validateBooking(auth()->user(), $booking->event, $flight);
+
+                    if (!$validationResult->isSuccess()) {
+                        flashMessage('danger', __('Booking Restricted'), $validationResult->errorMessage);
+                        return to_route('bookings.event.index', $booking->event);
+                    }
+                }
+
                 $booking->status = BookingStatus::BOOKED;
                 $booking->save();
                 event(new BookingConfirmed($booking));

@@ -13,6 +13,7 @@ use App\Events\BookingChanged;
 use App\Events\BookingDeleted;
 use App\Exports\BookingsExport;
 use App\Imports\BookingsImport;
+use App\Imports\BookingsValidationImport;
 use App\Policies\BookingPolicy;
 use App\Imports\FlightRouteAssign;
 use Illuminate\Http\RedirectResponse;
@@ -290,11 +291,101 @@ class BookingAdminController extends AdminController
             ->by(auth()->user())
             ->on($event)
             ->log('Import triggered');
+
         $file = $request->file('file');
-        (new BookingsImport($event))->import($file);
-        Storage::delete($file->getRealPath());
+
+        // First, validate the file to check for invalid airlines
+        $validationImport = new BookingsValidationImport($event);
+        $validationImport->validateFile($file);
+
+        // Check if there are invalid airlines
+        if ($validationImport->hasInvalidAirlines()) {
+            $invalidAirlines = $validationImport->getInvalidAirlines();
+            $airlineList = implode(', ', $invalidAirlines);
+
+            // Store the file temporarily and invalid airlines in session for confirmation
+            $tempPath = $file->store('temp');
+            session()->flash('invalid_airlines', $invalidAirlines);
+            session()->flash('import_file_path', $tempPath);
+            session()->flash('event_id', $event->id);
+
+            flashMessage(
+                'warning',
+                __('Invalid Airlines Detected'),
+                __('The following airlines were not recognized: ' . $airlineList . '. Do you want to proceed with the import?')
+            );
+
+            return to_route('admin.bookings.import.confirm', $event);
+        }
+
+        // No invalid airlines, proceed with import
+        $this->processImport($file, $event);
+
         flashMessage('success', __('Flights imported'), __('Flights have been imported'));
         return to_route('bookings.event.index', $event);
+    }
+
+    /**
+     * Show confirmation page for invalid airlines
+     */
+    public function importConfirm(Event $event): View
+    {
+        $invalidAirlines = session('invalid_airlines', []);
+        return view('event.admin.import-confirm', compact('event', 'invalidAirlines'));
+    }
+
+    /**
+     * Process the import after confirmation
+     */
+    public function importProcess(Request $request, Event $event): RedirectResponse
+    {
+        $tempPath = session('import_file_path');
+        $invalidAirlines = session('invalid_airlines', []);
+
+        if (!$tempPath) {
+            flashMessage('error', __('Import Failed'), __('Import file not found. Please try again.'));
+            return to_route('admin.bookings.importForm', $event);
+        }
+
+        // Get the full path to the stored file
+        $fullPath = Storage::path($tempPath);
+
+        // Process the import using the stored file
+        $import = new BookingsImport($event);
+        $import->import($fullPath);
+
+        // Clean up the temporary file
+        Storage::delete($tempPath);
+
+        // Clear session data
+        session()->forget(['invalid_airlines', 'import_file_path', 'event_id']);
+
+        if (!empty($invalidAirlines)) {
+            $airlineList = implode(', ', $invalidAirlines);
+            flashMessage(
+                'success',
+                __('Import Completed'),
+                __('Import completed successfully. The following airlines were not recognized and were set to "No airline": ' . $airlineList)
+            );
+        } else {
+            flashMessage('success', __('Flights imported'), __('Flights have been imported'));
+        }
+
+        return to_route('bookings.event.index', $event);
+    }
+
+    /**
+     * Process the actual import
+     */
+    private function processImport($file, Event $event): void
+    {
+        $import = new BookingsImport($event);
+        $import->import($file);
+
+        // Clean up the uploaded file
+        if (is_object($file) && method_exists($file, 'getRealPath')) {
+            Storage::delete($file->getRealPath());
+        }
     }
 
     public function adminAutoAssignForm(Event $event): View

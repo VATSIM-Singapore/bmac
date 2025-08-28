@@ -11,12 +11,12 @@ class CachedDataService
 {
     /**
      * Get airports formatted for select dropdowns
-     * Cached for 1 hour (3600 seconds)
+     * Cached for 1 day (24 hours)
      */
     public function getAirportsForSelect(): Collection
     {
         try {
-            return Cache::remember('airports_for_select', 3600, function () {
+            return Cache::remember('airports_for_select', 86400, function () {
                 return Airport::all(['id', 'icao', 'iata', 'name'])
                     ->keyBy('id')
                     ->map(function ($airport) {

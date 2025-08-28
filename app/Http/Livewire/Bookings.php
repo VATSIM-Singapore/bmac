@@ -33,7 +33,7 @@ class Bookings extends Component
         $filter = $this->filter;
         // @TODO Check should actually be in a policy
         if ($this->event->is_online || auth()->check() && auth()->user()->isAdmin) {
-            $this->bookings = $this->event->bookings()
+            $bookingsQuery = $this->event->bookings()
             ->with([
                 'event',
                 'user',
@@ -51,8 +51,15 @@ class Bookings extends Component
                 'flights.airportDep',
                 'flights.airportArr',
             ])
-            ->withCount('flights')
-            ->get();
+            ->withCount('flights');
+
+            // Apply my-bookings filter if selected and user is authenticated
+            if ($filter === 'my-bookings' && auth()->check()) {
+                $bookingsQuery->where('user_id', auth()->id())
+                    ->where('status', BookingStatus::BOOKED);
+            }
+
+            $this->bookings = $bookingsQuery->get();
         } else {
             abort_unless(auth()->check() && auth()->user()->isAdmin, 404);
         }
@@ -67,6 +74,22 @@ class Bookings extends Component
             $this->bookings = $this->bookings->sortBy(function ($booking) {
                 $flight = $booking->flights->first();
                 return $flight && $flight->eta ? $flight->eta->timestamp : PHP_INT_MAX;
+            });
+        } elseif ($filter === 'my-bookings') {
+            // For my bookings, sort by time (CTOT first, then ETA)
+            $this->bookings = $this->bookings->sortBy(function ($booking) {
+                $flight = $booking->flights->first();
+                if (!$flight) {
+                    return PHP_INT_MAX;
+                }
+
+                // Use CTOT if available, otherwise ETA, otherwise max value
+                if ($flight->ctot) {
+                    return $flight->ctot->timestamp;
+                } elseif ($flight->eta) {
+                    return $flight->eta->timestamp;
+                }
+                return PHP_INT_MAX;
             });
         } else {
             // Default sorting: first by CTOT, then by ETA

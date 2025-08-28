@@ -1,5 +1,11 @@
 <div {{ $refreshInSeconds ? "wire:poll.{$refreshInSeconds}s" : '' }}>
-    <h3>{{ $event->name }} | {{ $filter ? ucfirst($filter) : 'Slot Table' }}</h3>
+    <h3>{{ $event->name }} | 
+        @if($filter == 'my-bookings')
+            My Bookings
+        @else
+            {{ $filter ? ucfirst($filter) : 'Slot Table' }}
+        @endif
+    </h3>
     <hr>
     <p>
         @if($event->hasOrderButtons())
@@ -12,6 +18,11 @@
             <button wire:model="filter" wire:click="filter('arrivals')"
                 class="btn {{ $filter == 'arrivals' ? 'btn-success' : 'btn-primary' }}">Show
                 Arrivals</button>&nbsp;
+        @endif
+        @if(auth()->check())
+            <button wire:model="filter" wire:click="filter('my-bookings')"
+                class="btn {{ $filter == 'my-bookings' ? 'btn-success' : 'btn-primary' }}">My
+                Bookings</button>&nbsp;
         @endif
         @if(auth()->check() && auth()->user()->isAdmin && $event->endBooking >= now())
             @push('scripts')

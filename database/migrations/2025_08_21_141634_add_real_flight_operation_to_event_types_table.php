@@ -3,7 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
-class AddRealFlightEventToEventTypesTable extends Migration
+class AddRealFlightOperationToEventTypesTable extends Migration
 {
     /**
      * Run the migrations.

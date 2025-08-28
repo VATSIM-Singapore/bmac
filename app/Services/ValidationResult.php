@@ -6,13 +6,11 @@ class ValidationResult
 {
     public bool $isSuccess;
     public ?string $errorMessage;
-    public ?string $confirmationMessage;
 
     public function __construct()
     {
         $this->isSuccess = false;
         $this->errorMessage = null;
-        $this->confirmationMessage = null;
     }
 
     public static function success(): self
@@ -22,13 +20,7 @@ class ValidationResult
         return $result;
     }
 
-    public static function successWithConfirmation(string $message): self
-    {
-        $result = new self();
-        $result->isSuccess = true;
-        $result->confirmationMessage = $message;
-        return $result;
-    }
+
 
     public static function error(string $message): self
     {
@@ -40,7 +32,7 @@ class ValidationResult
 
     public function getMessage(): ?string
     {
-        return $this->errorMessage ?? $this->confirmationMessage;
+        return $this->errorMessage;
     }
 
     public function isSuccess(): bool

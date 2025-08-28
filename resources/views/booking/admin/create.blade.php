@@ -99,29 +99,6 @@
             </div>
         </div>
         
-        @if($event->event_type_id == \App\Enums\EventType::REALFLIGHTOPS->value)
-            @push('scripts')
-                <script>
-                    // Admin confirmation for Real Flight Operations booking restrictions
-                    document.querySelector('form').addEventListener('submit', function(e) {
-                        e.preventDefault();
-                        
-                        Swal.fire({
-                            title: 'Admin Override Required',
-                            text: 'You are bypassing Real Flight Operations booking restrictions. Are you sure you want to proceed?',
-                            icon: 'warning',
-                            showCancelButton: true,
-                            confirmButtonText: 'Yes, proceed',
-                            cancelButtonText: 'Cancel',
-                            reverseButtons: true
-                        }).then((result) => {
-                            if (result.isConfirmed) {
-                                this.submit();
-                            }
-                        });
-                    });
-                </script>
-            @endpush
-        @endif
+
     </div>
 @endsection

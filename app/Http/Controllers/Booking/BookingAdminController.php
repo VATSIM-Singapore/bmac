@@ -123,24 +123,6 @@ class BookingAdminController extends AdminController
 
             $booking->flights()->create($flightAttributes);
 
-            // Validate Real Flight Operations booking restrictions for admin
-            $flight = $booking->flights->first();
-            if ($flight) {
-                $validator = new RealFlightBookingValidator();
-                $validationResult = $validator->validateBooking($booking->user, $booking->event, $flight, true);
-
-                if (!$validationResult->isSuccess()) {
-                    if ($validationResult->confirmationMessage) {
-                        flashMessage('warning', __('Admin Override'), $validationResult->confirmationMessage);
-                    } else {
-                        flashMessage('danger', __('Booking Restricted'), $validationResult->errorMessage);
-                        // Delete the booking if validation fails
-                        $booking->delete();
-                        return to_route('bookings.event.index', $event);
-                    }
-                }
-            }
-
             flashMessage('success', __('Done'), __('Slot created'));
         }
         return to_route('bookings.event.index', $event);
@@ -235,15 +217,11 @@ class BookingAdminController extends AdminController
         // Validate Real Flight Operations booking restrictions for admin update
         if ($booking->user) {
             $validator = new RealFlightBookingValidator();
-            $validationResult = $validator->validateBooking($booking->user, $booking->event, $flight, true);
+            $validationResult = $validator->validateBooking($booking->user, $booking->event, $flight);
 
             if (!$validationResult->isSuccess()) {
-                if ($validationResult->confirmationMessage) {
-                    flashMessage('warning', __('Admin Override'), $validationResult->confirmationMessage);
-                } else {
-                    flashMessage('danger', __('Booking Restricted'), $validationResult->errorMessage);
-                    return to_route('bookings.event.index', $booking->event);
-                }
+                flashMessage('danger', __('Booking Restricted'), $validationResult->errorMessage);
+                return to_route('bookings.event.index', $booking->event);
             }
         }
 

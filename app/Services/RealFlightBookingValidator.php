@@ -14,7 +14,7 @@ class RealFlightBookingValidator
     /**
      * Validate booking for Real Flight Operations events
      */
-    public function validateBooking(User $user, Event $event, Flight $newFlight, bool $isAdmin = false): ValidationResult
+    public function validateBooking(User $user, Event $event, Flight $newFlight): ValidationResult
     {
         // Only apply to Real Flight Operations events
         if ($event->event_type_id !== EventType::REALFLIGHTOPS->value) {
@@ -38,13 +38,6 @@ class RealFlightBookingValidator
         $timeValidation = $this->validateTimeSeparation($newFlight, $existingBookings);
         if (!$timeValidation->isSuccess()) {
             return $timeValidation;
-        }
-
-        // Admin override confirmation
-        if ($isAdmin) {
-            return ValidationResult::successWithConfirmation(
-                'Admin override: Bypassing Real Flight Operations booking restrictions.'
-            );
         }
 
         return ValidationResult::success();

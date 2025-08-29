@@ -21,7 +21,15 @@
     {{-- @TODO Temp fix for events using filter buttons --}}
     @if ($flight)
         {{-- Check if flight belongs to the logged in user --}}
-        <tr class="{{ auth()->check() && $booking->user_id == auth()->id() ? 'table-active' : '' }}">
+        <tr class="{{ auth()->check() && $booking->user_id == auth()->id() ? 'table-active' : '' }}"
+            data-std="{{ $booking->event->uses_times ? $flight->formattedCtot : '' }}"
+            data-sta="{{ $booking->event->uses_times ? $flight->formattedEta : '' }}"
+            data-flight="{{ strtolower($booking->formatted_callsign) }}"
+            data-from="{{ strtolower($flight->airportDep->icao) }}"
+            data-to="{{ strtolower($flight->airportArr->icao) }}"
+            data-from-name="{{ strtolower($flight->airportDep->name) }}"
+            data-to-name="{{ strtolower($flight->airportArr->name) }}"
+            data-aircraft="{{ strtolower($booking->formatted_actype) }}">
             @if ($booking->event->uses_times)
                 <td>
                     {{ $flight->formattedCtot }}

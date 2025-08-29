@@ -38,7 +38,7 @@
             });
         </script>
     @endpush
-    <div class="d-flex flex-row flex-wrap">
+    <div class="d-flex flex-row flex-wrap mb-3">
         <a href="{{ route('admin.airports.create') }}" class="btn btn-primary m-1"><i class="fa fa-plus"></i> Add new
             Airport</a>
         <a href="{{ route('admin.airportLinks.create') }}" class="btn btn-primary m-1"><i class="fa fa-plus"></i> Add
@@ -47,6 +47,36 @@
             Link</a>
         <button class="btn btn-danger m-1 delete-unused-airports" form="delete-unused-airports"><i class="fa fa-trash"></i>
             Delete unused airports</button>
+    </div>
+
+    <!-- Search Form -->
+    <div class="card mb-3">
+        <div class="card-body">
+            <form method="GET" action="{{ route('admin.airports.index') }}" class="row g-3">
+                <div class="col-md-6">
+                    <label for="icao" class="form-label">Search by ICAO</label>
+                    <input type="text" class="form-control" id="icao" name="icao"
+                           value="{{ request('icao') }}" placeholder="Enter ICAO code...">
+                </div>
+                <div class="col-md-6 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary mr-2">
+                        <i class="fa fa-search"></i> Search
+                    </button>
+                    @if(request('icao'))
+                        <a href="{{ route('admin.airports.index') }}" class="btn btn-secondary">
+                            <i class="fa fa-times"></i> Clear
+                        </a>
+                    @endif
+                </div>
+            </form>
+            @if(request('icao'))
+                <div class="mt-2">
+                    <small class="text-muted">
+                        Showing results for ICAO: <strong>{{ request('icao') }}</strong>
+                    </small>
+                </div>
+            @endif
+        </div>
     </div>
     <table class="table table-hover">
         <thead>

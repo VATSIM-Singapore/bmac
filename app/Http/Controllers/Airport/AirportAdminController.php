@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Airport;
 use App\Models\Airport;
 use Illuminate\View\View;
 use App\Policies\AirportPolicy;
+use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use App\Http\Controllers\AdminController;
 use App\Http\Requests\Airport\Admin\StoreAirport;
@@ -18,10 +19,17 @@ class AirportAdminController extends AdminController
         $this->authorizeResource(AirportPolicy::class, 'airport');
     }
 
-    public function index(): View
+    public function index(Request $request): View
     {
-        $airports = Airport::with(['flightsDep', 'flightsArr', 'eventDep', 'eventArr'])
-            ->paginate(100);
+        $query = Airport::with(['flightsDep', 'flightsArr', 'eventDep', 'eventArr']);
+
+        // Filter by ICAO if search term is provided
+        if ($request->filled('icao')) {
+            $query->where('icao', 'LIKE', strtoupper($request->icao) . '%');
+        }
+
+        $airports = $query->paginate(100)->appends($request->query());
+
         return view('airport.admin.overview', compact('airports'));
     }
 

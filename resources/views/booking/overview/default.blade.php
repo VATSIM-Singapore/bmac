@@ -1,12 +1,12 @@
 <thead>
     <tr>
         @if ($event->uses_times)
-            <th scope="row"><abbr title="Calculated Take Off Time">CTOT</abbr></th>
-            <th scope="row"><abbr title="Estimated Time of Arrival">ETA</abbr></th>
+            <th scope="row"><abbr title="Scheduled Time of Departure">STD</abbr></th>
+            <th scope="row"><abbr title="Scheduled Time of Arrival">STA</abbr></th>
         @endif
+            <th scope="row">Flight</th>
         <th scope="row">From</th>
         <th scope="row">To</th>
-        <th scope="row">Flight</th>
         <th scope="row">Aircraft</th>
         <th scope="row">Book | Available until {{ $event->endBooking->format('d-m-Y H:i') }}z</th>
         @if (auth()->check() && auth()->user()->isAdmin && $event->endEvent >= now())
@@ -30,22 +30,6 @@
                     {{ $flight->formattedEta }}
                 </td>
             @endif
-            <td>
-                <div class="d-flex align-items-center">
-                    <div>
-                        <div>{{ $flight->airportDep->icao }}</div>
-                        <small class="text-muted">{{ $flight->airportDep->name }}</small>
-                    </div>
-                </div>
-            </td>
-            <td>
-                <div class="d-flex align-items-center">
-                    <div>
-                        <div>{{ $flight->airportArr->icao }}</div>
-                        <small class="text-muted">{{ $flight->airportArr->name }}</small>
-                    </div>
-                </div>
-            </td>
             <td class="{{ auth()->check() && auth()->user()->use_monospace_font ? 'text-monospace' : '' }}">
                 <div class="d-flex align-items-top">
                     @if($booking->airline && $booking->airline->logo_url)
@@ -60,6 +44,22 @@
                         @if($booking->airline)
                             <small class="text-muted">{{ $booking->airline->name }}</small>
                         @endif
+                    </div>
+                </div>
+            </td>
+            <td>
+                <div class="d-flex align-items-center">
+                    <div>
+                        <div>{{ $flight->airportDep->icao }}</div>
+                        <small class="text-muted">{{ $flight->airportDep->name }}</small>
+                    </div>
+                </div>
+            </td>
+            <td>
+                <div class="d-flex align-items-center">
+                    <div>
+                        <div>{{ $flight->airportArr->icao }}</div>
+                        <small class="text-muted">{{ $flight->airportArr->name }}</small>
                     </div>
                 </div>
             </td>

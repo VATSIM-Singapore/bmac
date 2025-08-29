@@ -59,12 +59,12 @@
                         @else
                             <x-form-group inline>
                                 <x-form-input name="ctot" type="time"
-                                    :label="'<i class=\'fa fa-clock\'></i> ' . __('CTOT')">
+                                    :label="'<i class=\'fa fa-clock\'></i> ' . __('STD')">
                                     @slot('append')
                                         z
                                     @endslot
                                 </x-form-input>
-                                <x-form-input name="eta" type="time" :label="'<i class=\'fa fa-clock\'></i> ' . __('ETA')">
+                                <x-form-input name="eta" type="time" :label="'<i class=\'fa fa-clock\'></i> ' . __('STA')">
                                     @slot('append')
                                         z
                                     @endslot
@@ -98,7 +98,7 @@
                 </div>
             </div>
         </div>
-        
+
 
     </div>
 @endsection

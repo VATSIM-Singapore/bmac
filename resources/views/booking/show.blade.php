@@ -51,13 +51,13 @@
 
                     @if ($booking->event->uses_times)
                         @if ($flight->ctot)
-                            <x-form-group :label="__('CTOT')">
+                            <x-form-group :label="__('STD')">
                                 <strong>{{ $flight->formatted_ctot }}</strong>
                             </x-form-group>
                         @endif
 
                         @if ($flight->eta)
-                            <x-form-group :label="__('ETA')">
+                            <x-form-group :label="__('STA')">
                                 <strong>{{ $flight->formatted_eta }}</strong>
                             </x-form-group>
                         @endif

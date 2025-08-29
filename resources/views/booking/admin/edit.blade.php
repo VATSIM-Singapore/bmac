@@ -26,14 +26,14 @@
                         <x-form-select name="airline_id" :label="__('Airline (optional)')" :options="$airlines" :placeholder="__('Choose airline...')" :value="$booking->airline_id" />
 
                         @bind($flight)
-                        
+
                         <x-form-group inline>
-                            <x-form-input name="ctot" :bind="false" value="{{ $flight->ctot?->format('H:i') }}" type="time" :label="'<i class=\'fa fa-clock\'></i> ' . __('CTOT')">
+                            <x-form-input name="ctot" :bind="false" value="{{ $flight->ctot?->format('H:i') }}" type="time" :label="'<i class=\'fa fa-clock\'></i> ' . __('STD')">
                                 @slot('append')
                                     z
                                 @endslot
                             </x-form-input>
-                            <x-form-input name="eta" :bind="false" value="{{ $flight->eta?->format('H:i') }}" type="time" :label="'<i class=\'fa fa-clock\'></i> ' . __('ETA')">
+                            <x-form-input name="eta" :bind="false" value="{{ $flight->eta?->format('H:i') }}" type="time" :label="'<i class=\'fa fa-clock\'></i> ' . __('STA')">
                                 @slot('append')
                                     z
                                 @endslot
@@ -83,6 +83,6 @@
             </div>
         </div>
     </div>
-    
+
 
 @endsection

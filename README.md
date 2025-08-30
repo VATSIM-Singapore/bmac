@@ -195,6 +195,21 @@ run the following command:
     If you're planning on importing flights later on,
     add the airports in first before starting a import.
 
+9. (Optional) If you want to seed WSSS airport bays,
+run the following command:
+
+   ```bash
+     php artisan seed:wsss-bays
+   ```
+
+    This command will seed all Singapore Changi Airport (WSSS) bay data into the database.
+    The command includes 182 bays across all terminals and gate areas.
+    It will automatically check if the WSSS airport exists before proceeding,
+    and will skip any bays that already exist in the database.
+    
+    **Note**: This command requires the WSSS airport to be present in the airports table.
+    If WSSS is not found, the command will display an error and stop execution.
+
 ## Queue worker / Laravel Horizon
 
 If you're not using `sync` as `QUEUE_CONNECTION`, you need to run a queue worker,

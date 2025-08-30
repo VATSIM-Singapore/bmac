@@ -95,7 +95,7 @@ class BookingAdminController extends AdminController
                 'is_editable' => $request->is_editable,
                 'callsign' => $request->callsign,
                 'acType' => $request->acType,
-                'airline_id' => $data['airline_id'],
+                'airline_id' => $data['airline_id'] ?? null,
             ]);
 
             $booking->event()->associate($request->id)->save();
@@ -162,7 +162,7 @@ class BookingAdminController extends AdminController
             'is_editable' => $request->is_editable,
             'callsign' => $request->callsign,
             'acType' => $request->acType,
-            'airline_id' => $data['airline_id'],
+            'airline_id' => $data['airline_id'] ?? null,
             'final_information_email_sent_at' => null
         ]);
 

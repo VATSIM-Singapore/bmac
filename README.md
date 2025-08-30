@@ -225,13 +225,35 @@ run the following command:
      php artisan seed:wsss-bays
    ```
 
-    This command will seed all Singapore Changi Airport (WSSS) bay data into the database.
-    The command includes 182 bays across all terminals and gate areas.
-    It will automatically check if the WSSS airport exists before proceeding,
-    and will skip any bays that already exist in the database.
-    
-    **Note**: This command requires the WSSS airport to be present in the airports table.
-    If WSSS is not found, the command will display an error and stop execution.
+   This command will seed all Singapore Changi Airport (WSSS) bay data into the database.
+   The command includes 182 bays across all terminals and gate areas.
+   It will automatically check if the WSSS airport exists before proceeding,
+   and will skip any bays that already exist in the database.
+   
+   **Note**: This command requires the WSSS airport to be present in the airports table.
+   If WSSS is not found, the command will display an error and stop execution.
+
+12. (Optional) If you want to populate airline assignments for existing bookings,
+run the following command:
+
+   ```bash
+     php artisan event:populate-booking-airline {eventSlug}
+   ```
+
+   This command automatically assigns airline IDs to bookings based on their callsign ICAO codes.
+   It processes all bookings in the specified event that have callsigns but no assigned airline,
+   extracts the first 3 characters from each callsign as the airline ICAO code,
+   and matches it with the airline database.
+   
+   **Features:**
+   - Validates event existence before processing
+   - Only processes bookings without existing airline assignments
+   - Extracts ICAO from callsign (first 3 characters)
+   - Provides detailed summary of results and failed matches
+   - Skips bookings that already have airlines assigned
+   
+   This is useful for events where bookings were created without airline assignments
+   or when airline data was imported after bookings were made.
 
 ## Queue worker / Laravel Horizon
 

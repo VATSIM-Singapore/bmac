@@ -7,6 +7,10 @@
             <th scope="row">Flight</th>
         <th scope="row">From</th>
         <th scope="row">To</th>
+        @if ($event->event_type_id == \App\Enums\EventType::REALFLIGHTOPS->value)
+            <th scope="row"><abbr title="Assigned Departure Gate">Dep Bay</abbr></th>
+            <th scope="row"><abbr title="Assigned Arrival Gate">Arr Bay</abbr></th>
+        @endif
         <th scope="row">Aircraft</th>
         <th scope="row">Book | Available until {{ $event->endBooking->format('d-m-Y H:i') }}z</th>
         @if (auth()->check() && auth()->user()->isAdmin && $event->endEvent >= now())
@@ -71,6 +75,22 @@
                     </div>
                 </div>
             </td>
+            @if ($event->event_type_id == \App\Enums\EventType::REALFLIGHTOPS->value)
+                <td class="text-center">
+                    @if ($flight->depBay)
+                        <span class="badge badge-info">{{ $flight->depBay->name }}</span>
+                    @else
+                        <span class="text-muted">-</span>
+                    @endif
+                </td>
+                <td class="text-center">
+                    @if ($flight->arrBay)
+                        <span class="badge badge-success">{{ $flight->arrBay->name }}</span>
+                    @else
+                        <span class="text-muted">-</span>
+                    @endif
+                </td>
+            @endif
             <td class="{{ auth()->check() && auth()->user()->use_monospace_font ? 'text-monospace' : '' }}">
                 {{ $booking->formatted_actype }}</td>
             <td>

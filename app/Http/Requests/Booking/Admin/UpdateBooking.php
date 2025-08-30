@@ -27,7 +27,25 @@ class UpdateBooking extends Request
             'oceanicTrack' => 'nullable|alpha|min:1|max:2',
             'notes' => 'nullable',
             'message' => 'nullable',
-            'notify_user' => 'nullable'
+            'notify_user' => 'nullable',
+            'dep_bay' => [
+                'present',
+                'nullable',
+                function ($attribute, $value, $fail) {
+                    if (!empty($value) && !\App\Models\Bay::where('id', $value)->exists()) {
+                        $fail('The selected ' . $attribute . ' is invalid.');
+                    }
+                },
+            ],
+            'arr_bay' => [
+                'present',
+                'nullable',
+                function ($attribute, $value, $fail) {
+                    if (!empty($value) && !\App\Models\Bay::where('id', $value)->exists()) {
+                        $fail('The selected ' . $attribute . ' is invalid.');
+                    }
+                },
+            ],
         ];
     }
 
@@ -51,7 +69,9 @@ class UpdateBooking extends Request
             'oceanicFL' => __('Oceanic Entry Level') . ' / ' . __('Cruise FL'),
             'notes' => __('Notes'),
             'message' => __('Message'),
-            'notify_user' => __('Notify user')
+            'notify_user' => __('Notify user'),
+            'dep_bay' => __('Departure Bay'),
+            'arr_bay' => __('Arrival Bay'),
         ];
     }
 

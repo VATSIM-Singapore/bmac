@@ -30,6 +30,24 @@ class StoreBooking extends Request
             'separation' => 'sometimes|numeric|min:1',
             'oceanicFL' => 'sometimes|nullable|integer:3',
             'notes' => 'nullable',
+            'dep_bay' => [
+                'sometimes',
+                'nullable',
+                function ($attribute, $value, $fail) {
+                    if (!empty($value) && !\App\Models\Bay::where('id', $value)->exists()) {
+                        $fail('The selected ' . $attribute . ' is invalid.');
+                    }
+                },
+            ],
+            'arr_bay' => [
+                'sometimes',
+                'nullable',
+                function ($attribute, $value, $fail) {
+                    if (!empty($value) && !\App\Models\Bay::where('id', $value)->exists()) {
+                        $fail('The selected ' . $attribute . ' is invalid.');
+                    }
+                },
+            ],
         ];
     }
 
@@ -57,6 +75,8 @@ class StoreBooking extends Request
             'separation' => __('Separation (in minutes)'),
             'oceanicFL' => __('Oceanic Entry Level') . ' / ' . __('Cruise FL'),
             'notes' => __('Notes'),
+            'dep_bay' => __('Departure Bay'),
+            'arr_bay' => __('Arrival Bay'),
         ];
     }
 

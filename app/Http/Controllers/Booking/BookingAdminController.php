@@ -25,6 +25,7 @@ use App\Http\Requests\Booking\Admin\StoreBooking;
 use App\Http\Requests\Booking\Admin\UpdateBooking;
 use App\Http\Requests\Booking\Admin\ImportBookings;
 use App\Services\CachedDataService;
+use App\Services\BayAssignmentService;
 use App\Services\RealFlightBookingValidator;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -121,7 +122,18 @@ class BookingAdminController extends AdminController
                 );
             }
 
-            $booking->flights()->create($flightAttributes);
+            $flight = $booking->flights()->create($flightAttributes);
+
+            // Handle bay assignments for real flight ops events
+            if ($event->event_type_id == \App\Enums\EventType::REALFLIGHTOPS->value) {
+                $bayAssignmentService = new BayAssignmentService();
+                $bayAssignmentService->applyBayAssignments($flight, $event, [
+                    'dep_bay' => $request->dep_bay === '' ? null : $request->dep_bay,
+                    'arr_bay' => $request->arr_bay === '' ? null : $request->arr_bay
+                ]);
+            }
+
+            $flight->save();
 
             flashMessage('success', __('Done'), __('Slot created'));
         }
@@ -138,7 +150,26 @@ class BookingAdminController extends AdminController
 
             $flight = $booking->flights()->first();
             $booking->load('airline'); // Ensure airline relationship is loaded
-            return view('booking.admin.edit', compact('booking', 'airports', 'airlines', 'flight'));
+
+            // Load bay options for current airports if this is a real flight ops event
+            $depBays = [];
+            $arrBays = [];
+            if ($booking->event->event_type_id == \App\Enums\EventType::REALFLIGHTOPS->value) {
+                if ($flight->dep) {
+                    $depBays = ['' => '-- No Bay --'] + \App\Models\Bay::where('airport_id', $flight->dep)
+                        ->orderBy('name')
+                        ->pluck('name', 'id')
+                        ->toArray();
+                }
+                if ($flight->arr) {
+                    $arrBays = ['' => '-- No Bay --'] + \App\Models\Bay::where('airport_id', $flight->arr)
+                        ->orderBy('name')
+                        ->pluck('name', 'id')
+                        ->toArray();
+                }
+            }
+
+            return view('booking.admin.edit', compact('booking', 'airports', 'airlines', 'flight', 'depBays', 'arrBays'));
         }
         flashMessage('danger', __('Danger'), __('Booking can no longer be edited'));
         return back();
@@ -226,6 +257,16 @@ class BookingAdminController extends AdminController
         }
 
         $booking->save();
+
+        // Handle bay assignments for real flight ops events
+        if ($booking->event->event_type_id == \App\Enums\EventType::REALFLIGHTOPS->value) {
+            $bayAssignmentService = new BayAssignmentService();
+            $bayAssignmentService->applyBayAssignments($flight, $booking->event, [
+                'dep_bay' => $request->dep_bay === '' ? null : $request->dep_bay,
+                'arr_bay' => $request->arr_bay === '' ? null : $request->arr_bay
+            ]);
+        }
+
         $flight->save();
         if ($shouldSendEmail) {
             event(new BookingChanged($booking, $changes));

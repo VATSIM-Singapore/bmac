@@ -50,6 +50,8 @@ class Bookings extends Component
                 },
                 'flights.airportDep',
                 'flights.airportArr',
+                'flights.depBay',
+                'flights.arrBay',
             ])
             ->withCount('flights');
 

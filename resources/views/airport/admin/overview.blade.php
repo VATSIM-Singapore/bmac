@@ -84,7 +84,7 @@
                 <th scope="row">ICAO</th>
                 <th scope="row">IATA</th>
                 <th scope="row">Name</th>
-                <th scope="row" colspan="2">Actions</th>
+                <th scope="row" colspan="3">Actions</th>
             </tr>
         </thead>
         @foreach ($airports as $airport)
@@ -96,6 +96,13 @@
                     <a href="{{ route('admin.airports.edit', $airport) }}">
                         <button class="btn btn-primary">
                             <i class="fa fa-edit"></i> Edit Airport
+                        </button>
+                    </a>
+                </td>
+                <td>
+                    <a href="{{ route('admin.airports.bays.index', $airport) }}">
+                        <button class="btn btn-info">
+                            <i class="fa fa-plane"></i> Manage Bays
                         </button>
                     </a>
                 </td>

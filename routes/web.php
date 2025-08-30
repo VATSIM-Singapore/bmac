@@ -13,6 +13,7 @@ use App\Http\Controllers\Airline\AirlineAdminController;
 use App\Http\Controllers\Booking\BookingAdminController;
 use App\Http\Controllers\AirportLink\AirportLinkAdminController;
 use App\Http\Controllers\EventLink\EventLinkAdminController;
+use App\Http\Controllers\BayController;
 
 /*
 |--------------------------------------------------------------------------
@@ -35,6 +36,12 @@ Route::group(['as' => 'admin.', 'prefix' => 'admin', 'middleware' => 'auth.isAdm
     // Airports
     Route::post('airports/destroy-unused', [AirportAdminController::class, 'destroyUnused'])->name('airports.destroyUnused');
     Route::resource('airports', AirportAdminController::class);
+
+    // Bays
+    Route::get('airports/{airport}/bays', [BayController::class, 'index'])->name('airports.bays.index');
+    Route::post('airports/{airport}/bays', [BayController::class, 'store'])->name('airports.bays.store');
+    Route::put('airports/{airport}/bays/{bay}', [BayController::class, 'update'])->name('airports.bays.update');
+    Route::delete('airports/{airport}/bays/{bay}', [BayController::class, 'destroy'])->name('airports.bays.destroy');
 
     // Airlines
     Route::resource('airlines', AirlineAdminController::class);

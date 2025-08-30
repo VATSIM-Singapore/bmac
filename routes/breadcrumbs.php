@@ -35,6 +35,12 @@ Breadcrumbs::for('admin.airports.edit', function ($trail, $airport) {
     $trail->push('Edit Airport', route('admin.airports.edit', $airport));
 });
 
+// Home > Admin > Airports > Manage Bays
+Breadcrumbs::for('admin.airports.bays.index', function ($trail, $airport) {
+    $trail->parent('admin.airports.index');
+    $trail->push('Manage Bays', route('admin.airports.bays.index', $airport));
+});
+
 // Home > Admin > Airlines
 Breadcrumbs::for('admin.airlines.index', function ($trail) {
     $trail->parent('admin');

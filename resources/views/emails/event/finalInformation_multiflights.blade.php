@@ -8,7 +8,7 @@ Thanks for booking a slot for the {{ $booking->event->name }} event. Here you ca
 Callsign: **{{ $booking->formatted_callsign }}**
 
 @component('mail::table')
-| FROM | TO | CTOT | ROUTE |
+| FROM | TO | STD | ROUTE |
 |----------------------------|:--------------------------:|:--------------------------:|:----:|
 @foreach ($booking->flights()->get() as $flight)
 | {{ $flight->airportDep->icao }} | {{ $flight->airportArr->icao }} | {{ $flight->formattedCtot }} | {{ $flight->route }}

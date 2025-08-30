@@ -20,10 +20,10 @@ Thanks for booking a slot for the {{ $booking->event->name }} event. Here you ca
 | To: | **{{ $flight->airportArr->icao }}** |
 @endif
 @isset($flight->ctot)
-| CTOT: | **{{ $flight->formattedCtot }}** |
+| STD: | **{{ $flight->formattedCtot }}** |
 @endisset
 @isset($flight->eta)
-| ETA: | **{{ $flight->formattedEta }}** |
+| STA: | **{{ $flight->formattedEta }}** |
 @endisset
 @isset($flight->route)
 | Full Route: | **{{ $flight->route }}** |

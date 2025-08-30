@@ -195,7 +195,30 @@ run the following command:
     If you're planning on importing flights later on,
     add the airports in first before starting a import.
 
-9. (Optional) If you want to seed WSSS airport bays,
+9. (Optional) If you want to import airline data with logos,
+run the following command:
+
+   ```bash
+     php artisan import:airlines
+   ```
+
+    This command will import airline data from `resources/airlines_data/airlines.csv`
+    and extract airline logos from `resources/airlines_data/logos.zip`.
+    
+    **Requirements:**
+    - `airlines.csv` with columns: ICAO, Name, Callsign (optional)
+    - `logos.zip` containing logo files in ICAO.gif format (e.g., UAE.gif, QFA.gif)
+    
+    **Features:**
+    - Skips airlines that already exist (based on ICAO code)
+    - Automatically sets logo paths for airlines that have corresponding logo files
+    - Extracts logos to `storage/app/public/airlines/` directory
+    - Won't overwrite existing logo files
+    
+    The logos will be accessible via the airline's `logo_url` attribute and displayed
+    in booking forms and other airline-related views.
+
+11. (Optional) If you want to seed WSSS airport bays,
 run the following command:
 
    ```bash

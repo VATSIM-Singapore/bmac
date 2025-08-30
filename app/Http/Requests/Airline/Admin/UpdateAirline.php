@@ -19,6 +19,7 @@ class UpdateAirline extends Request
         return [
             'icao' => 'required|string|size:3|unique:airlines,icao,' . $airlineId,
             'name' => 'required|string|max:255',
+            'callsign' => 'nullable|string|max:255',
             'logo' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ];
     }
@@ -33,6 +34,7 @@ class UpdateAirline extends Request
         return [
             'icao' => __('ICAO'),
             'name' => __('Name'),
+            'callsign' => __('Callsign'),
             'logo' => __('Logo'),
         ];
     }

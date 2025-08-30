@@ -44,7 +44,7 @@ Route::group(['as' => 'admin.', 'prefix' => 'admin', 'middleware' => 'auth.isAdm
     Route::delete('airports/{airport}/bays/{bay}', [BayController::class, 'destroy'])->name('airports.bays.destroy');
 
     // Airlines
-    Route::resource('airlines', AirlineAdminController::class);
+    Route::resource('airlines', AirlineAdminController::class)->except(['show']);
 
     // AirportLinks
     Route::resource('airportLinks', AirportLinkAdminController::class)->except(['show']);

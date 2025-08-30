@@ -16,6 +16,7 @@ class StoreAirline extends Request
         return [
             'icao' => 'required|string|unique:airlines|size:3',
             'name' => 'required|string|max:255',
+            'callsign' => 'nullable|string|max:255',
             'logo' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ];
     }
@@ -30,6 +31,7 @@ class StoreAirline extends Request
         return [
             'icao' => __('ICAO'),
             'name' => __('Name'),
+            'callsign' => __('Callsign'),
             'logo' => __('Logo'),
         ];
     }

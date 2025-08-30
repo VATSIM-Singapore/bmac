@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
  * @property int $id
  * @property string $icao
  * @property string $name
+ * @property string|null $callsign
  * @property string|null $logo_path
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
@@ -27,6 +28,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
  * @method static \Illuminate\Database\Eloquent\Builder|Airline newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder|Airline newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder|Airline query()
+ * @method static \Illuminate\Database\Eloquent\Builder|Airline whereCallsign($value)
  * @method static \Illuminate\Database\Eloquent\Builder|Airline whereCreatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder|Airline whereIcao($value)
  * @method static \Illuminate\Database\Eloquent\Builder|Airline whereId($value)

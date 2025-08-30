@@ -2,7 +2,7 @@
 
 @section('content')
     <x-forms.alert />
-    <div class="row justify-content-center">
+    <div class="row justify-content-center mb-3">
         <div class="col-md-8">
             <div class="card">
                 <div class="card-header">{{ $airline->id ? __('Edit') : __('Add new') }} {{ __('Airline') }}</div>
@@ -16,7 +16,8 @@
                         @bind($airline)
                         <x-form-input name="icao" :label="__('ICAO')" required maxlength="3" />
                         <x-form-input name="name" :label="__('Name')" required />
-                        
+                        <x-form-input name="callsign" :label="__('Callsign')" />
+
                         <div class="form-group">
                             <label for="logo">{{ __('Logo') }}</label>
                             <input type="file" class="form-control-file" id="logo" name="logo" accept="image/*">
@@ -29,13 +30,18 @@
                             <small class="form-text text-muted">Upload an image file (JPEG, PNG, JPG, GIF) up to 2MB.</small>
                         </div>
 
-                        <x-form-submit>
-                            @if ($airline->id)
-                                <i class="fa fa-check"></i> {{ __('Edit') }}
-                            @else
-                                <i class="fa fa-plus"></i> {{ __('Add') }}
-                            @endif
-                        </x-form-submit>
+                        <div class="form-group">
+                            <button type="submit" class="btn btn-primary">
+                                @if ($airline->id)
+                                    <i class="fa fa-check"></i> {{ __('Edit') }}
+                                @else
+                                    <i class="fa fa-plus"></i> {{ __('Add') }}
+                                @endif
+                            </button>
+                            <a href="{{ route('admin.airlines.index') }}" class="btn btn-secondary ml-2">
+                                <i class="fa fa-times"></i> {{ __('Cancel') }}
+                            </a>
+                        </div>
                         @endbind
                     </x-form>
                 </div>

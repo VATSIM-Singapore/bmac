@@ -53,15 +53,9 @@ Breadcrumbs::for('admin.airlines.create', function ($trail) {
     $trail->push('New', route('admin.airlines.create'));
 });
 
-// Home > Admin > Airlines > [Airline]
-Breadcrumbs::for('admin.airlines.show', function ($trail, $airline) {
-    $trail->parent('admin.airlines.index');
-    $trail->push($airline->name . ' [' . $airline->icao . ']', route('admin.airlines.show', $airline));
-});
-
-// Home > Admin > Airlines > [Airline] > Edit Airline
+// Home > Admin > Airlines > Edit Airline
 Breadcrumbs::for('admin.airlines.edit', function ($trail, $airline) {
-    $trail->parent('admin.airlines.show', $airline);
+    $trail->parent('admin.airlines.index');
     $trail->push('Edit Airline', route('admin.airlines.edit', $airline));
 });
 

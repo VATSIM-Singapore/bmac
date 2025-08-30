@@ -56,11 +56,6 @@ class AirlineAdminController extends AdminController
         return to_route('admin.airlines.index');
     }
 
-    public function show(Airline $airline): View
-    {
-        return view('airline.admin.show', compact('airline'));
-    }
-
     public function edit(Airline $airline): View
     {
         return view('airline.admin.form', compact('airline'));

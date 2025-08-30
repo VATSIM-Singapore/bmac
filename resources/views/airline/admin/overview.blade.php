@@ -23,7 +23,7 @@
             });
         </script>
     @endpush
-    <div class="d-flex flex-row flex-wrap">
+    <div class="d-flex flex-row flex-wrap mb-3">
         <a href="{{ route('admin.airlines.create') }}" class="btn btn-primary m-1"><i class="fa fa-plus"></i> Add new
             Airline</a>
     </div>
@@ -32,14 +32,16 @@
             <tr>
                 <th scope="row">ICAO</th>
                 <th scope="row">Name</th>
+                <th scope="row">Callsign</th>
                 <th scope="row">Logo</th>
                 <th scope="row" colspan="2">Actions</th>
             </tr>
         </thead>
         @foreach ($airlines as $airline)
             <tr>
-                <td><a href="{{ route('admin.airlines.show', $airline) }}">{{ $airline->icao }}</a></td>
-                <td><a href="{{ route('admin.airlines.show', $airline) }}">{{ $airline->name }}</a></td>
+                <td>{{ $airline->icao }}</td>
+                <td>{{ $airline->name }}</td>
+                <td>{{ $airline->callsign }}</td>
                 <td>
                     @if($airline->logo_url)
                         <img src="{{ $airline->logo_url }}" alt="{{ $airline->name }} logo" style="max-height: 30px; max-width: 100px;">

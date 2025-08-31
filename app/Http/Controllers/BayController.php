@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Bay;
 use App\Models\Airport;
+use App\Services\CachedDataService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\View\View;
@@ -16,7 +17,8 @@ class BayController extends Controller
      */
     public function index(Airport $airport): View
     {
-        $bays = Bay::getSortedBaysForAirport($airport->id);
+        $cachedDataService = new CachedDataService();
+        $bays = $cachedDataService->getSortedBays($airport->id);
 
         return view('bay.index', compact('airport', 'bays'));
     }
@@ -38,6 +40,10 @@ class BayController extends Controller
         ]);
 
         $bay = $airport->bays()->create($validated);
+
+        // Clear bay cache for this airport
+        $cachedDataService = new CachedDataService();
+        $cachedDataService->clearBaysCache($airport->id);
 
         return response()->json([
             'success' => true,
@@ -69,6 +75,10 @@ class BayController extends Controller
 
         $bay->update($validated);
 
+        // Clear bay cache for this airport
+        $cachedDataService = new CachedDataService();
+        $cachedDataService->clearBaysCache($airport->id);
+
         return response()->json([
             'success' => true,
             'message' => 'Bay updated successfully.',
@@ -87,6 +97,10 @@ class BayController extends Controller
         }
 
         $bay->delete();
+
+        // Clear bay cache for this airport
+        $cachedDataService = new CachedDataService();
+        $cachedDataService->clearBaysCache($airport->id);
 
         return response()->json([
             'success' => true,

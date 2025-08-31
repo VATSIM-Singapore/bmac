@@ -7,6 +7,7 @@ use App\Models\Event;
 use App\Models\Bay;
 use App\Models\Flight;
 use App\Enums\EventType;
+use App\Services\CachedDataService;
 use Carbon\Carbon;
 
 class BayManagementController extends Controller
@@ -23,7 +24,8 @@ class BayManagementController extends Controller
         }
 
         // Get all bays for the event airport
-        $bays = Bay::getSortedBaysForAirport($event->dep);
+        $cachedDataService = new CachedDataService();
+        $bays = $cachedDataService->getSortedBays($event->dep);
 
         // Get all flights for this event that have bay assignments
         $flights = Flight::whereHas('booking', function ($query) use ($event) {

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
+use App\Services\CachedDataService;
 
 class Bay extends Model
 {
@@ -17,6 +18,23 @@ class Bay extends Model
         'airport_id',
         'name',
     ];
+
+    /**
+     * The "booted" method of the model.
+     */
+    protected static function booted(): void
+    {
+        // Clear cache when a bay is created, updated, or deleted
+        static::saved(function (Bay $bay) {
+            $cachedDataService = new CachedDataService();
+            $cachedDataService->clearBaysCache($bay->airport_id);
+        });
+
+        static::deleted(function (Bay $bay) {
+            $cachedDataService = new CachedDataService();
+            $cachedDataService->clearBaysCache($bay->airport_id);
+        });
+    }
 
     public function getActivitylogOptions(): LogOptions
     {

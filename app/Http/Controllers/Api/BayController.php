@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Bay;
+use App\Services\CachedDataService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -21,7 +21,8 @@ class BayController extends Controller
             'airport_id' => 'required|exists:airports,id'
         ]);
 
-        $bays = Bay::getSortedBaysForAirport($request->airport_id)
+        $cachedDataService = new CachedDataService();
+        $bays = $cachedDataService->getSortedBays($request->airport_id)
             ->map(function ($bay) {
                 return ['id' => $bay->id, 'name' => $bay->name];
             });

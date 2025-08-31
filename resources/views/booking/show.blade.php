@@ -79,10 +79,22 @@
                         </x-form-group>
                     @endif
 
+                    @if ($flight->depBay)
+                        <x-form-group :label="__('Departure Bay')">
+                            <strong>{{ $flight->depBay->name }}</strong>
+                        </x-form-group>
+                    @endif
+
                     @if ($flight->arr)
                         <x-form-group :label="__('ADES')">
                             <strong>{{ $flight->airportArr->icao }} - {{ $flight->airportArr->name }} -
                                 {{ $flight->airportArr->iata }}</strong>
+                        </x-form-group>
+                    @endif
+
+                    @if ($flight->arrBay)
+                        <x-form-group :label="__('Arrival Bay')">
+                            <strong>{{ $flight->arrBay->name }}</strong>
                         </x-form-group>
                     @endif
 

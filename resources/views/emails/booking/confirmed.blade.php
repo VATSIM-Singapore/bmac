@@ -25,8 +25,14 @@ For reference, your booking details are listed below.
 @if($booking->flights()->first()->dep)
 | Departs: | **{{ $booking->flights()->first()->airportDep->icao  }}** |
 @endif
+@if($booking->flights()->first()->depBay)
+| Departure Bay: | **{{ $booking->flights()->first()->depBay->name }}** |
+@endif
 @if($booking->flights()->first()->arr)
 | Arrives: | **{{ $booking->flights()->first()->airportArr->icao }}** |
+@endif
+@if($booking->flights()->first()->arrBay)
+| Arrival Bay: | **{{ $booking->flights()->first()->arrBay->name }}** |
 @endif
 @if($booking->event->is_oceanic_event)
 | Cruising: | **{{ $booking->flights()->first()->formatted_oceanicfl }}** |

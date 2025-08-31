@@ -15,7 +15,16 @@
                         @bind($booking)
                             @if (!$booking->is_editable)
                                 <x-form-group :label="__('Callsign')">
-                                    <strong>{{ $booking->formatted_callsign }}</strong>
+                                    <strong>
+                                        {{ $booking->formatted_callsign }}
+                                        @if($booking->airline && $booking->airline->callsign && $booking->callsign)
+                                            @php
+                                                // Extract flight number from callsign (remove airline ICAO code)
+                                                $flightNumber = preg_replace('/^' . preg_quote($booking->airline->icao, '/') . '/', '', $booking->callsign);
+                                            @endphp
+                                            ({{ $booking->airline->callsign }} {{ $flightNumber }})
+                                        @endif
+                                    </strong>
                                 </x-form-group>
                                 <x-form-group :label="__('Aircraft code')">
                                     <strong>{{ $booking->formatted_actype }}</strong>

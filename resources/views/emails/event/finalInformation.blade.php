@@ -8,7 +8,10 @@ Thanks for booking a slot for the {{ $booking->event->name }} event. Here you ca
 @component('mail::table')
 |  |  |
 |-----------|---------------------------|
-| Callsign: | **{{ $booking->formatted_callsign }}** |
+| Callsign: | **{{ $booking->formatted_callsign }}@if($booking->airline && $booking->airline->callsign && $booking->callsign)
+@php
+    $flightNumber = preg_replace('/^' . preg_quote($booking->airline->icao, '/') . '/', '', $booking->callsign);
+@endphp ({{ $booking->airline->callsign }} {{ $flightNumber }})@endif** |
 | Aircraft: | **{{ $booking->formatted_actype }}** |
 @if($booking->getRawOriginal('selcal') != null)
 | SELCAL: | **{{ $booking->formatted_selcal }}** |

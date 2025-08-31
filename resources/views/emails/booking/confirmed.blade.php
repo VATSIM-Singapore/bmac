@@ -17,7 +17,10 @@ For reference, your booking details are listed below.
 | Event Date: | **{{ $booking->event->startEvent->toFormattedDateString() }}** |
 @else
 |-----------|---------------------------|
-| Callsign: | **{{ $booking->callsign }}** |
+| Callsign: | **{{ $booking->callsign }}@if($booking->airline && $booking->airline->callsign && $booking->callsign)
+@php
+    $flightNumber = preg_replace('/^' . preg_quote($booking->airline->icao, '/') . '/', '', $booking->callsign);
+@endphp ({{ $booking->airline->callsign }} {{ $flightNumber }})@endif** |
 | Aircraft: | **{{ $booking->acType }}** |
 @if($booking->flights()->first()->dep)
 | Departs: | **{{ $booking->flights()->first()->airportDep->icao  }}** |

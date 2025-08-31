@@ -20,8 +20,8 @@
                                         2</abbr></strong> -
                                 <strong><abbr title="[ICAO]">Airport 3</abbr></strong>
                             @else
-                                Call Sign | <strong><abbr title="[ICAO]">Origin</abbr></strong> |
-                                <strong><abbr title="[ICAO]">Destination</abbr></strong> |
+                                Call Sign | <strong><abbr title="[ICAO]">Origin</abbr></strong> | Origin Bay |
+                                <strong><abbr title="[ICAO]">Destination</abbr></strong> | Destination Bay |
                                 <abbr title="[ICAO]">Airline</abbr> | <abbr title="[hh:mm]">CTOT</abbr> | <abbr title="[hh:mm]">ETA</abbr> |
                                 <abbr title="[ICAO]">Aircraft Type</abbr> | Route | Notes | Track | <abbr
                                     title="Max 3 numbers. Examples: 370">FL</abbr>

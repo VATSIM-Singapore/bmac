@@ -313,32 +313,55 @@ class BookingAdminController extends AdminController
 
         $file = $request->file('file');
 
-        // First, validate the file to check for invalid airlines
+        // Store the file first before validation to ensure it's available
+        $tempPath = $file->store('temp');
+
+        // First, validate the file to check for invalid airlines and bays
         $validationImport = new BookingsValidationImport($event);
-        $validationImport->validateFile($file);
+        $validationImport->validateFile(Storage::path($tempPath));
 
-        // Check if there are invalid airlines
-        if ($validationImport->hasInvalidAirlines()) {
-            $invalidAirlines = $validationImport->getInvalidAirlines();
-            $airlineList = implode(', ', $invalidAirlines);
+        // Check if there are invalid airlines or bays
+        $hasInvalidAirlines = $validationImport->hasInvalidAirlines();
+        $hasInvalidBays = $validationImport->hasInvalidBays();
 
-            // Store the file temporarily and invalid airlines in session for confirmation
-            $tempPath = $file->store('temp');
-            session()->flash('invalid_airlines', $invalidAirlines);
-            session()->flash('import_file_path', $tempPath);
-            session()->flash('event_id', $event->id);
+        if ($hasInvalidAirlines || $hasInvalidBays) {
+            $warnings = [];
 
+            if ($hasInvalidAirlines) {
+                $invalidAirlines = $validationImport->getInvalidAirlines();
+                $airlineList = implode(', ', $invalidAirlines);
+                $warnings[] = __('Invalid airlines: ' . $airlineList);
+            }
+
+            if ($hasInvalidBays) {
+                $invalidBays = $validationImport->getInvalidBays();
+                $bayList = implode(', ', $invalidBays);
+                $warnings[] = __('Invalid bays: ' . $bayList);
+            }
+
+            // Store warnings and file path in session
+            session()->put([
+                'import_warnings' => $warnings,
+                'import_file_path' => $tempPath,
+                'invalid_airlines' => $hasInvalidAirlines ? $validationImport->getInvalidAirlines() : [],
+                'invalid_bays' => $hasInvalidBays ? $validationImport->getInvalidBays() : [],
+            ]);
+
+            $warningMessage = implode('. ', $warnings) . '. ' . __('Do you want to proceed with the import?');
             flashMessage(
                 'warning',
-                __('Invalid Airlines Detected'),
-                __('The following airlines were not recognized: ' . $airlineList . '. Do you want to proceed with the import?')
+                __('Invalid Data Detected'),
+                $warningMessage
             );
 
             return to_route('admin.bookings.import.confirm', $event);
         }
 
-        // No invalid airlines, proceed with import
-        $this->processImport($file, $event);
+        // No invalid data, proceed with import directly
+        $this->processImport(Storage::path($tempPath), $event);
+
+        // Clean up the temporary file
+        Storage::delete($tempPath);
 
         flashMessage('success', __('Flights imported'), __('Flights have been imported'));
         return to_route('bookings.event.index', $event);
@@ -350,7 +373,8 @@ class BookingAdminController extends AdminController
     public function importConfirm(Event $event): View
     {
         $invalidAirlines = session('invalid_airlines', []);
-        return view('event.admin.import-confirm', compact('event', 'invalidAirlines'));
+        $invalidBays = session('invalid_bays', []);
+        return view('event.admin.import-confirm', compact('event', 'invalidAirlines', 'invalidBays'));
     }
 
     /**
@@ -360,51 +384,70 @@ class BookingAdminController extends AdminController
     {
         $tempPath = session('import_file_path');
         $invalidAirlines = session('invalid_airlines', []);
+        $invalidBays = session('invalid_bays', []);
 
         if (!$tempPath) {
-            flashMessage('error', __('Import Failed'), __('Import file not found. Please try again.'));
+            flashMessage('error', __('Import Failed'), __('Import file path not found in session. Please try the import again.'));
             return to_route('admin.bookings.importForm', $event);
         }
 
-        // Get the full path to the stored file
-        $fullPath = Storage::path($tempPath);
-
-        // Process the import using the stored file
-        $import = new BookingsImport($event);
-        $import->import($fullPath);
-
-        // Clean up the temporary file
-        Storage::delete($tempPath);
-
-        // Clear session data
-        session()->forget(['invalid_airlines', 'import_file_path', 'event_id']);
-
-        if (!empty($invalidAirlines)) {
-            $airlineList = implode(', ', $invalidAirlines);
-            flashMessage(
-                'success',
-                __('Import Completed'),
-                __('Import completed successfully. The following airlines were not recognized and were set to "No airline": ' . $airlineList)
-            );
-        } else {
-            flashMessage('success', __('Flights imported'), __('Flights have been imported'));
+        // Check if the file actually exists
+        if (!Storage::exists($tempPath)) {
+            flashMessage('error', __('Import Failed'), __('Import file not found in storage. File path: ' . $tempPath . '. Please try again.'));
+            return to_route('admin.bookings.importForm', $event);
         }
 
-        return to_route('bookings.event.index', $event);
+        try {
+            // Get the full path to the stored file
+            $fullPath = Storage::path($tempPath);
+
+            // Process the import using the stored file
+            $import = new BookingsImport($event);
+            $import->import($fullPath);
+
+            // Clean up the temporary file
+            Storage::delete($tempPath);
+
+            // Clear session data
+            session()->forget(['invalid_airlines', 'invalid_bays', 'import_file_path', 'import_warnings']);
+
+            $warningMessages = [];
+            if (!empty($invalidAirlines)) {
+                $airlineList = implode(', ', $invalidAirlines);
+                $warningMessages[] = __('Airlines not recognized: ' . $airlineList . ' (set to "No airline")');
+            }
+            if (!empty($invalidBays)) {
+                $bayList = implode(', ', $invalidBays);
+                $warningMessages[] = __('Bays not recognized: ' . $bayList . ' (ignored)');
+            }
+
+            if (!empty($warningMessages)) {
+                $message = __('Import completed successfully. ') . implode('. ', $warningMessages) . '.';
+                flashMessage('success', __('Import Completed'), $message);
+            } else {
+                flashMessage('success', __('Flights imported'), __('Flights have been imported'));
+            }
+
+            return to_route('bookings.event.index', $event);
+
+        } catch (\Exception $e) {
+            // Clean up the temporary file on error
+            if (Storage::exists($tempPath)) {
+                Storage::delete($tempPath);
+            }
+
+            flashMessage('error', __('Import Failed'), __('An error occurred during import: ' . $e->getMessage()));
+            return to_route('admin.bookings.importForm', $event);
+        }
     }
 
     /**
      * Process the actual import
      */
-    private function processImport($file, Event $event): void
+    private function processImport($filePath, Event $event): void
     {
         $import = new BookingsImport($event);
-        $import->import($file);
-
-        // Clean up the uploaded file
-        if (is_object($file) && method_exists($file, 'getRealPath')) {
-            Storage::delete($file->getRealPath());
-        }
+        $import->import($filePath);
     }
 
     public function adminAutoAssignForm(Event $event): View

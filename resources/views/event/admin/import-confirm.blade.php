@@ -9,16 +9,31 @@
                 <div class="card-header">{{ $event->name }} | {{ __('Import Confirmation') }}</div>
 
                 <div class="card-body">
-                    <div class="alert alert-warning">
-                        <h5><i class="fas fa-exclamation-triangle"></i> {{ __('Invalid Airlines Detected') }}</h5>
-                        <p>{{ __('The following airlines in your import file were not recognized in the database:') }}</p>
-                        <ul>
-                            @foreach($invalidAirlines as $airline)
-                                <li><strong>{{ $airline }}</strong></li>
-                            @endforeach
-                        </ul>
-                        <p>{{ __('These airlines will be set to "No airline" during import.') }}</p>
-                    </div>
+                    @if(!empty($invalidAirlines))
+                        <div class="alert alert-warning">
+                            <h5><i class="fas fa-exclamation-triangle"></i> {{ __('Invalid Airlines Detected') }}</h5>
+                            <p>{{ __('The following airlines in your import file were not recognized in the database:') }}</p>
+                            <ul>
+                                @foreach($invalidAirlines as $airline)
+                                    <li><strong>{{ $airline }}</strong></li>
+                                @endforeach
+                            </ul>
+                            <p>{{ __('These airlines will be set to "No airline" during import.') }}</p>
+                        </div>
+                    @endif
+
+                    @if(!empty($invalidBays))
+                        <div class="alert alert-warning">
+                            <h5><i class="fas fa-exclamation-triangle"></i> {{ __('Invalid Bays Detected') }}</h5>
+                            <p>{{ __('The following bays in your import file were not recognized in the database:') }}</p>
+                            <ul>
+                                @foreach($invalidBays as $bay)
+                                    <li><strong>{{ $bay }}</strong></li>
+                                @endforeach
+                            </ul>
+                            <p>{{ __('These bay assignments will be ignored during import.') }}</p>
+                        </div>
+                    @endif
 
                     <div class="row">
                         <div class="col-md-6">

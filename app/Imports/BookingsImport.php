@@ -6,8 +6,10 @@ use App\Enums\EventType;
 use App\Models\Event;
 use App\Models\Airport;
 use App\Models\Airline;
+use App\Models\Bay;
 use App\Models\Booking;
 use App\Services\CachedDataService;
+use App\Services\BayAssignmentService;
 use Maatwebsite\Excel\Concerns\ToModel;
 use PhpOffice\PhpSpreadsheet\Shared\Date;
 use Maatwebsite\Excel\Concerns\Importable;
@@ -23,6 +25,7 @@ class BookingsImport implements ToModel, WithHeadingRow, WithBatchInserts, WithC
 
     private Collection $airlinesCache;
     private array $invalidAirlines = [];
+    private array $invalidBays = [];
 
     public function __construct(public Event $event)
     {
@@ -76,6 +79,10 @@ class BookingsImport implements ToModel, WithHeadingRow, WithBatchInserts, WithC
                 ],
             ]);
         } else {
+            // Get bay assignments
+            $depBayId = $this->getBayId($row['origin_bay'] ?? null, $this->getAirport($row['origin']));
+            $arrBayId = $this->getBayId($row['destination_bay'] ?? null, $this->getAirport($row['destination']));
+
             $flight = collect([
                 'dep'          => $this->getAirport($row['origin']),
                 'arr'          => $this->getAirport($row['destination']),
@@ -85,8 +92,20 @@ class BookingsImport implements ToModel, WithHeadingRow, WithBatchInserts, WithC
                 'oceanicTrack' => $row['track'] ?? null,
                 'oceanicFL'    => $row['fl'] ?? null,
                 'route'        => $row['route'] ?? null,
+                'dep_bay'      => $depBayId,
+                'arr_bay'      => $arrBayId,
             ]);
-            $booking->flights()->create($flight->toArray());
+            $flight = $booking->flights()->create($flight->toArray());
+
+            // Apply bay assignment timing calculations if bays are assigned
+            if ($depBayId || $arrBayId) {
+                $bayAssignmentService = new BayAssignmentService();
+                $bayAssignmentService->applyBayAssignments($flight, $this->event, [
+                    'dep_bay' => $depBayId,
+                    'arr_bay' => $arrBayId
+                ]);
+                $flight->save();
+            }
         }
     }
 
@@ -113,6 +132,8 @@ class BookingsImport implements ToModel, WithHeadingRow, WithBatchInserts, WithC
             'origin'        => 'exists:airports,icao',
             'destination'   => 'exists:airports,icao',
             'airline'       => 'sometimes|nullable|string|max:3',
+            'origin_bay'    => 'sometimes|nullable|string',
+            'destination_bay' => 'sometimes|nullable|string',
             'track'         => 'sometimes|nullable',
             'oceanicFL'     => 'sometimes|nullable|integer:3',
             'aircraft_type' => 'sometimes|nullable|max:4',
@@ -226,5 +247,52 @@ class BookingsImport implements ToModel, WithHeadingRow, WithBatchInserts, WithC
     public function hasInvalidAirlines(): bool
     {
         return !empty($this->invalidAirlines);
+    }
+
+    /**
+     * Get bay ID from bay name, with validation and caching
+     */
+    private function getBayId(?string $bayName, int $airportId): ?int
+    {
+        if (empty($bayName)) {
+            return null;
+        }
+
+        $bayName = trim($bayName);
+
+        // Look up bay by name and airport
+        $bay = Bay::where('name', $bayName)
+                  ->where('airport_id', $airportId)
+                  ->first();
+
+        if ($bay) {
+            return $bay->id;
+        }
+
+        // Bay not found - add to invalid list for warning with airport ICAO
+        $airport = Airport::find($airportId);
+        $airportDisplay = $airport ? $airport->icao : 'Unknown Airport';
+        $invalidBayKey = $bayName . ' (Airport: ' . $airportDisplay . ')';
+        if (!in_array($invalidBayKey, $this->invalidBays)) {
+            $this->invalidBays[] = $invalidBayKey;
+        }
+
+        return null; // Set to null (no bay)
+    }
+
+    /**
+     * Get list of invalid bays found during import
+     */
+    public function getInvalidBays(): array
+    {
+        return $this->invalidBays;
+    }
+
+    /**
+     * Check if there are any invalid bays
+     */
+    public function hasInvalidBays(): bool
+    {
+        return !empty($this->invalidBays);
     }
 }

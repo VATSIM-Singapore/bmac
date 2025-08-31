@@ -125,6 +125,12 @@ Breadcrumbs::for('admin.events.email.form', function ($trail, $event) {
     $trail->push('Send E-mail', route('admin.events.email.form', $event));
 });
 
+// Home > Admin > Events > [Event] > Bay Management
+Breadcrumbs::for('admin.events.bay-management', function ($trail, $event) {
+    $trail->parent('admin.events.show', $event);
+    $trail->push('Bay Management', route('admin.events.bay-management', $event));
+});
+
 // Home (no event found)
 Breadcrumbs::for('bookings.index', function ($trail) {
     $trail->parent('home');

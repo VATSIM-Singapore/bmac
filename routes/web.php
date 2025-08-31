@@ -90,6 +90,10 @@ Route::group(['as' => 'admin.', 'prefix' => 'admin', 'middleware' => 'auth.isAdm
         '{event}/bookings/route-assign',
         [BookingAdminController::class, 'routeAssign']
     )->name('bookings.routeAssign');
+
+    // Bay Management Routes
+    Route::get('{event}/bay-management', [App\Http\Controllers\Admin\BayManagementController::class, 'index'])
+        ->name('events.bay-management');
 });
 
 Route::resource('bookings', BookingController::class)->only(['show', 'edit', 'update']);

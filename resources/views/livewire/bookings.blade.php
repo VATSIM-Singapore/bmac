@@ -51,6 +51,23 @@
                     class="fa fa-plus"></i>
                 Add
                 Timeslots</a>&nbsp;
+            
+            @if ($event->event_type_id == \App\Enums\EventType::REALFLIGHTOPS->value)
+                @php
+                    $canManageBays = $event->dep && $event->arr && $event->dep == $event->arr;
+                    $tooltip = $canManageBays ? '' : 'Bay management is only available when departure and arrival airports are the same';
+                @endphp
+                @if ($canManageBays)
+                    <a href="{{ route('admin.events.bay-management', $event) }}" class="btn btn-info">
+                        <i class="fa fa-building"></i> Manage Bays
+                    </a>&nbsp;
+                @else
+                    <button class="btn btn-secondary disabled" 
+                            title="{{ $tooltip }}" data-toggle="tooltip">
+                        <i class="fa fa-building"></i> Manage Bays
+                    </button>&nbsp;
+                @endif
+            @endif
         @endif
 
         @push('scripts')

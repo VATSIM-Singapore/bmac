@@ -21,9 +21,10 @@ class BayController extends Controller
             'airport_id' => 'required|exists:airports,id'
         ]);
 
-        $bays = Bay::where('airport_id', $request->airport_id)
-            ->orderBy('name')
-            ->get(['id', 'name']);
+        $bays = Bay::getSortedBaysForAirport($request->airport_id)
+            ->map(function ($bay) {
+                return ['id' => $bay->id, 'name' => $bay->name];
+            });
 
         return response()->json($bays);
     }

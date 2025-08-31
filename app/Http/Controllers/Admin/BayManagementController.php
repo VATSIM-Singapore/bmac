@@ -23,35 +23,7 @@ class BayManagementController extends Controller
         }
 
         // Get all bays for the event airport
-        $bays = Bay::where('airport_id', $event->dep)
-            ->get()
-            ->sortBy(function ($bay) {
-                $name = $bay->name;
-
-                // Check if the name starts with a letter
-                if (preg_match('/^[A-Z]/', $name)) {
-                    // Letter-prefixed gates: extract letter, number, and suffix for proper sorting
-                    if (preg_match('/^([A-Z]+)(\d+)([A-Z]*)$/', $name, $matches)) {
-                        $letter = $matches[1];      // "A", "C", etc.
-                        $number = (int)$matches[2]; // 1, 17, etc.
-                        $suffix = $matches[3] ?? ''; // "L", "R", etc.
-
-                        // Create sortable key: letter + padded number + suffix
-                        // This ensures A1 < A2 < A10 < C1 < C17L < C17R
-                        return $letter . str_pad($number, 5, '0', STR_PAD_LEFT) . $suffix;
-                    }
-                    // If it doesn't match the pattern, put it with letter gates but sort by name
-                    return '0' . $name;
-                } else {
-                    // Numeric-only gates: pad with zeros and prefix with 'ZZ' to put them last
-                    if (is_numeric($name)) {
-                        return 'ZZ' . str_pad($name, 5, '0', STR_PAD_LEFT);
-                    }
-                    // Other formats go last
-                    return 'ZZ' . $name;
-                }
-            })
-            ->values(); // Reset array keys
+        $bays = Bay::getSortedBaysForAirport($event->dep);
 
         // Get all flights for this event that have bay assignments
         $flights = Flight::whereHas('booking', function ($query) use ($event) {

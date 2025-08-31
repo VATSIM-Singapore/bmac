@@ -16,7 +16,7 @@ class BayController extends Controller
      */
     public function index(Airport $airport): View
     {
-        $bays = $airport->bays()->orderBy('name')->get();
+        $bays = Bay::getSortedBaysForAirport($airport->id);
 
         return view('bay.index', compact('airport', 'bays'));
     }

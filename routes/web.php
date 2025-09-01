@@ -94,6 +94,10 @@ Route::group(['as' => 'admin.', 'prefix' => 'admin', 'middleware' => 'auth.isAdm
     // Bay Management Routes
     Route::get('{event}/bay-management', [App\Http\Controllers\Admin\BayManagementController::class, 'index'])
         ->name('events.bay-management');
+    Route::get('{event}/bay-management/flight-details/{flight}', [App\Http\Controllers\Admin\BayManagementController::class, 'getFlightDetails'])
+        ->name('events.bay-management.flight-details');
+    Route::post('{event}/bay-management/flight-details/{flight}', [App\Http\Controllers\Admin\BayManagementController::class, 'updateFlightDetails'])
+        ->name('events.bay-management.update-flight-details');
 });
 
 Route::resource('bookings', BookingController::class)->only(['show', 'edit', 'update']);

@@ -9,6 +9,8 @@ use App\Models\Flight;
 use App\Enums\EventType;
 use App\Services\CachedDataService;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 
 class BayManagementController extends Controller
 {
@@ -202,23 +204,217 @@ class BayManagementController extends Controller
                 ($flight->airportArr->icao ?? null) :
                 ($flight->airportDep->icao ?? null),
             'time_from' => $assignedFrom->format('H:i'),
-            'time_to' => $assignedTo->format('H:i'),
+            'time_to' => $assignedTo->format('H:i')
         ];
 
-        // Add to first affected slot, mark others as spanned
+        // Add flight to every time slot it occupies, but only with colspan on the first occurrence
         foreach ($affectedSlots as $slotIndex => $timeSlotIndex) {
             $timeSlot = $timeSlots[$timeSlotIndex];
             $timeKey = $timeSlot->format('Y-m-d H:i');
 
             if (isset($matrix[$bayId][$timeKey])) {
-                if ($slotIndex === 0) {
-                    // First slot gets the full assignment data
-                    $matrix[$bayId][$timeKey][] = $assignmentData;
-                } else {
-                    // Subsequent slots get a marker to skip rendering
-                    $matrix[$bayId][$timeKey][] = ['skip' => true];
+                // Check if this flight is already in this time slot
+                $alreadyExists = false;
+                foreach ($matrix[$bayId][$timeKey] as $existing) {
+                    if (isset($existing['flight']) &&
+                        $existing['flight']->id === $flight->id &&
+                        $existing['type'] === $type) {
+                        $alreadyExists = true;
+                        break;
+                    }
+                }
+
+                if (!$alreadyExists) {
+                    $slotData = $assignmentData;
+                    // Only apply colspan to the first slot, others get colspan=1
+                    if ($slotIndex > 0) {
+                        $slotData['colspan'] = 1;
+                    }
+                    $matrix[$bayId][$timeKey][] = $slotData;
                 }
             }
         }
+    }
+
+    public function getFlightDetails(Event $event, Flight $flight, Request $request): JsonResponse
+    {
+        // Ensure this is a Real Flight Ops event
+        if ($event->event_type_id !== EventType::REALFLIGHTOPS->value) {
+            return response()->json(['error' => 'Bay management is only available for Real Flight Ops events.'], 403);
+        }
+
+        // Verify the flight belongs to this event
+        if ($flight->booking->event_id !== $event->id) {
+            return response()->json(['error' => 'Flight not found for this event.'], 404);
+        }
+
+        $assignmentType = $request->get('assignment_type', 'departure');
+
+        // Load relationships
+        $flight->load(['booking.user', 'airportDep', 'airportArr', 'depBay', 'arrBay']);
+
+        // Get available bays for the airport
+        $cachedDataService = new CachedDataService();
+        $bays = $cachedDataService->getSortedBays($event->dep);
+
+        // Generate the modal content HTML
+        $html = view('admin.bay-management.flight-details-modal', compact(
+            'flight',
+            'event',
+            'assignmentType',
+            'bays'
+        ))->render();
+
+        return response()->json(['html' => $html]);
+    }
+
+    public function updateFlightDetails(Event $event, Flight $flight, Request $request): JsonResponse
+    {
+        // Ensure this is a Real Flight Ops event
+        if ($event->event_type_id !== EventType::REALFLIGHTOPS->value) {
+            return response()->json(['error' => 'Bay management is only available for Real Flight Ops events.'], 403);
+        }
+
+        // Verify the flight belongs to this event
+        if ($flight->booking->event_id !== $event->id) {
+            return response()->json(['error' => 'Flight not found for this event.'], 404);
+        }
+
+        $assignmentType = $request->get('assignment_type', 'departure');
+
+        // Validate the request
+        $rules = [];
+        $data = [];
+
+        if ($assignmentType === 'departure') {
+            $rules = [
+                'dep_bay' => 'nullable|exists:bays,id',
+                'dep_bay_assigned_from' => 'nullable|date',
+                'dep_bay_assigned_to' => 'nullable|date|after:dep_bay_assigned_from',
+            ];
+
+            $data = [
+                'dep_bay' => $request->get('dep_bay') ?: null,
+                'dep_bay_assigned_from' => $request->get('dep_bay_assigned_from') ?
+                    Carbon::parse($request->get('dep_bay_assigned_from')) : null,
+                'dep_bay_assigned_to' => $request->get('dep_bay_assigned_to') ?
+                    Carbon::parse($request->get('dep_bay_assigned_to')) : null,
+            ];
+        } else {
+            $rules = [
+                'arr_bay' => 'nullable|exists:bays,id',
+                'arr_bay_assigned_from' => 'nullable|date',
+                'arr_bay_assigned_to' => 'nullable|date|after:arr_bay_assigned_from',
+            ];
+
+            $data = [
+                'arr_bay' => $request->get('arr_bay') ?: null,
+                'arr_bay_assigned_from' => $request->get('arr_bay_assigned_from') ?
+                    Carbon::parse($request->get('arr_bay_assigned_from')) : null,
+                'arr_bay_assigned_to' => $request->get('arr_bay_assigned_to') ?
+                    Carbon::parse($request->get('arr_bay_assigned_to')) : null,
+            ];
+        }
+
+        $validated = $request->validate($rules);
+
+        try {
+            // Check for overlapping bookings
+            $overlapWarning = $this->checkForOverlappingBookings($flight, $assignmentType, $data, $event);
+
+            if ($overlapWarning && !$request->get('force_save', false)) {
+                return response()->json([
+                    'overlap_detected' => true,
+                    'overlap_message' => $overlapWarning,
+                    'data' => $data
+                ]);
+            }
+
+            // Update the flight
+            $flight->update($data);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Flight details updated successfully!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error updating flight details: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    private function checkForOverlappingBookings(Flight $currentFlight, string $assignmentType, array $data, Event $event): ?string
+    {
+        $bayId = null;
+        $assignedFrom = null;
+        $assignedTo = null;
+        $bayField = null;
+        $fromField = null;
+        $toField = null;
+
+        if ($assignmentType === 'departure') {
+            $bayId = $data['dep_bay'] ?? null;
+            $assignedFrom = $data['dep_bay_assigned_from'] ?? null;
+            $assignedTo = $data['dep_bay_assigned_to'] ?? null;
+            $bayField = 'dep_bay';
+            $fromField = 'dep_bay_assigned_from';
+            $toField = 'dep_bay_assigned_to';
+        } else {
+            $bayId = $data['arr_bay'] ?? null;
+            $assignedFrom = $data['arr_bay_assigned_from'] ?? null;
+            $assignedTo = $data['arr_bay_assigned_to'] ?? null;
+            $bayField = 'arr_bay';
+            $fromField = 'arr_bay_assigned_from';
+            $toField = 'arr_bay_assigned_to';
+        }
+
+        // If no bay is assigned or no time range, no overlap possible
+        if (!$bayId || !$assignedFrom || !$assignedTo) {
+            return null;
+        }
+
+        // Find overlapping flights for the same bay and event
+        $overlappingFlights = Flight::whereHas('booking', function ($query) use ($event) {
+            $query->where('event_id', $event->id);
+        })
+        ->where('id', '!=', $currentFlight->id) // Exclude current flight
+        ->where($bayField, $bayId)
+        ->whereNotNull($fromField)
+        ->whereNotNull($toField)
+        ->where(function ($query) use ($fromField, $toField, $assignedFrom, $assignedTo) {
+            // Check for overlapping time ranges
+            $query->where(function ($q) use ($fromField, $toField, $assignedFrom, $assignedTo) {
+                // Case 1: New booking starts before existing ends and ends after existing starts
+                $q->where($fromField, '<', $assignedTo)
+                  ->where($toField, '>', $assignedFrom);
+            });
+        })
+        ->with(['booking'])
+        ->get();
+
+        if ($overlappingFlights->isEmpty()) {
+            return null;
+        }
+
+        // Build warning message
+        $bayName = \App\Models\Bay::find($bayId)?->name ?? 'Unknown';
+        $overlappingDetails = [];
+
+        foreach ($overlappingFlights as $overlappingFlight) {
+            $callsign = $overlappingFlight->booking->callsign ?? 'Unknown';
+            $fromTime = Carbon::parse($overlappingFlight->{$fromField})->format('H:i');
+            $toTime = Carbon::parse($overlappingFlight->{$toField})->format('H:i');
+            $overlappingDetails[] = "{$callsign} ({$fromTime}-{$toTime})";
+        }
+
+        $typeLabel = $assignmentType === 'departure' ? 'departure' : 'arrival';
+        $newFromTime = Carbon::parse($assignedFrom)->format('H:i');
+        $newToTime = Carbon::parse($assignedTo)->format('H:i');
+
+        $overlappingText = implode(', ', $overlappingDetails);
+
+        return "Bay {$bayName} {$typeLabel} assignment ({$newFromTime}-{$newToTime}) overlaps with existing booking(s): {$overlappingText}. Do you want to proceed anyway?";
     }
 }

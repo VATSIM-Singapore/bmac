@@ -43,122 +43,60 @@
                     <tbody>
                         @foreach($bays as $bay)
                             @php
-                                // Collect all unique flights for this bay first
-                                $allFlights = [];
-                                foreach($timeSlots as $timeSlot) {
-                                    $timeKey = $timeSlot->format('Y-m-d H:i');
-                                    $allAssignments = $bayUsage[$bay->id][$timeKey] ?? [];
-                                    $assignments = array_values(array_filter($allAssignments, function($assignment) {
-                                        return !isset($assignment['skip']);
-                                    }));
-                                    
-                                    foreach($assignments as $assignment) {
-                                        $flightKey = $assignment['flight']->id . '_' . $assignment['type'];
-                                        if (!isset($allFlights[$flightKey])) {
-                                            $allFlights[$flightKey] = $assignment;
-                                        }
+                                // Use pre-computed data from controller
+                                $bayData = $bayUsage[$bay->id] ?? [];
+
+                                // Calculate max rows needed for this bay
+                                $maxOverlaps = 1;
+                                foreach($bayData as $timeKey => $assignments) {
+                                    if (is_array($assignments)) {
+                                        $maxOverlaps = max($maxOverlaps, count($assignments));
                                     }
-                                }
-                                
-                                // Smart row allocation - assign flights to rows based on time conflicts
-                                $flightToRowMap = [];
-                                $rowOccupancy = []; // Track which time ranges each row occupies
-                                
-                                foreach($allFlights as $flightKey => $flight) {
-                                    $assigned = false;
-                                    $flightStart = $flight['time_from'];
-                                    $flightEnd = $flight['time_to'];
-                                    
-                                    // Try to assign to an existing row that doesn't conflict
-                                    foreach($rowOccupancy as $rowIndex => $occupiedRanges) {
-                                        $canUseRow = true;
-                                        foreach($occupiedRanges as $range) {
-                                            // Check if flight times overlap with existing range
-                                            if ($flightStart < $range['end'] && $flightEnd > $range['start']) {
-                                                $canUseRow = false;
-                                                break;
-                                            }
-                                        }
-                                        
-                                        if ($canUseRow) {
-                                            $flightToRowMap[$flightKey] = $rowIndex;
-                                            $rowOccupancy[$rowIndex][] = ['start' => $flightStart, 'end' => $flightEnd];
-                                            $assigned = true;
-                                            break;
-                                        }
-                                    }
-                                    
-                                    // If no existing row works, create a new one
-                                    if (!$assigned) {
-                                        $newRowIndex = count($rowOccupancy);
-                                        $flightToRowMap[$flightKey] = $newRowIndex;
-                                        $rowOccupancy[$newRowIndex] = [['start' => $flightStart, 'end' => $flightEnd]];
-                                    }
-                                }
-                                
-                                $maxOverlaps = max(1, count($rowOccupancy));
-                                
-                                // Also calculate the maximum simultaneous flights for validation
-                                $maxSimultaneous = 1;
-                                foreach($timeSlots as $timeSlot) {
-                                    $timeKey = $timeSlot->format('Y-m-d H:i');
-                                    $allAssignments = $bayUsage[$bay->id][$timeKey] ?? [];
-                                    $assignments = array_values(array_filter($allAssignments, function($assignment) {
-                                        return !isset($assignment['skip']);
-                                    }));
-                                    $maxSimultaneous = max($maxSimultaneous, count($assignments));
                                 }
                             @endphp
-                            
+
                             {{-- Create sub-rows for this bay --}}
                             @for($subRow = 0; $subRow < $maxOverlaps; $subRow++)
                                 <tr class="{{ $subRow > 0 ? 'bay-sub-row' : 'bay-main-row' }}">
                                     @if($subRow === 0)
-                                        <td class="bg-dark text-white font-weight-bold sticky-gate-cell" 
+                                        <td class="bg-dark text-white font-weight-bold sticky-gate-cell"
                                             rowspan="{{ $maxOverlaps }}">
                                             {{ $bay->name }}
                                         </td>
                                     @endif
-                                    
+
                                     @php $skipCells = []; @endphp
-                                    
+
                                     @foreach($timeSlots as $slotIndex => $timeSlot)
                                         @if(in_array($slotIndex, $skipCells))
                                             {{-- Skip this cell due to colspan --}}
                                             @continue
                                         @endif
-                                        
+
                                         @php
                                             $timeKey = $timeSlot->format('Y-m-d H:i');
-                                            $allAssignments = $bayUsage[$bay->id][$timeKey] ?? [];
-                                            $assignments = array_values(array_filter($allAssignments, function($assignment) {
-                                                return !isset($assignment['skip']);
-                                            }));
-                                            
-                                            // Get the assignment for this sub-row based on the flight-to-row mapping
+                                            $assignments = $bayData[$timeKey] ?? [];
+
+                                            // Ensure assignments is an array and get the assignment for this sub-row
                                             $assignment = null;
-                                            foreach($assignments as $a) {
-                                                $flightKey = $a['flight']->id . '_' . $a['type'];
-                                                if (isset($flightToRowMap[$flightKey]) && $flightToRowMap[$flightKey] === $subRow) {
-                                                    $assignment = $a;
-                                                    break;
-                                                }
+                                            if (is_array($assignments) && isset($assignments[$subRow]) && $assignments[$subRow] !== null) {
+                                                $assignment = $assignments[$subRow];
                                             }
                                         @endphp
-                                        
+
                                         @if($assignment)
                                             @php
                                                 $cssClass = $assignment['type'] === 'departure' ? 'bg-info text-white' : 'bg-success text-white';
                                                 $colspan = $assignment['colspan'] ?? 1;
-                                                
-                                                // Only add cells to skip if colspan > 1 (meaning this is the first occurrence of a spanning flight)
+
+                                                // Only add cells to skip if colspan > 1
                                                 if ($colspan > 1) {
                                                     for($i = 1; $i < $colspan; $i++) {
                                                         $skipCells[] = $slotIndex + $i;
                                                     }
                                                 }
                                             @endphp
-                                            
+
                                             <td class="time-slot {{ $cssClass }} flight-assignment-cell"
                                                 @if($colspan > 1)
                                                     colspan="{{ $colspan }}"
@@ -170,7 +108,7 @@
                                                 tabindex="0"
                                                 role="button"
                                                 aria-label="View flight details for {{ $assignment['callsign'] }}">
-                                                
+
                                                 <div class="text-center flight-details">
                                                     <div class="flight-callsign">{{ $assignment['callsign'] }}</div>
                                                     <div class="flight-airport-aircraft">
@@ -385,12 +323,12 @@ $(document).ready(function() {
     // Handle flight assignment cell clicks
     $('.flight-assignment-cell').on('click', function(e) {
         e.stopPropagation();
-        
+
         // Check if clicked on a specific flight details div
         const clickedFlightDetails = $(e.target).closest('.flight-details-row');
-        
+
         let flightId, assignmentType;
-        
+
         if (clickedFlightDetails.length > 0 && clickedFlightDetails.data('flight-id')) {
             // Clicked on a specific flight within the cell
             flightId = clickedFlightDetails.data('flight-id');
@@ -400,7 +338,7 @@ $(document).ready(function() {
             flightId = $(this).data('flight-id');
             assignmentType = $(this).data('assignment-type');
         }
-        
+
         if (flightId) {
             loadFlightDetails(flightId, assignmentType);
         }
@@ -411,7 +349,7 @@ $(document).ready(function() {
         e.stopPropagation();
         const flightId = $(this).data('flight-id');
         const assignmentType = $(this).data('assignment-type');
-        
+
         if (flightId) {
             loadFlightDetails(flightId, assignmentType);
         }
@@ -445,7 +383,7 @@ $(document).ready(function() {
         $(this).removeAttr('aria-hidden');
         $('body').removeClass('modal-open');
         $('.modal-backdrop').remove();
-        
+
         // Return focus to the clicked flight cell if it exists
         const lastClickedCell = $('.flight-assignment-cell.last-clicked');
         if (lastClickedCell.length) {
@@ -496,13 +434,13 @@ $(document).ready(function() {
     function closeModal() {
         // Remove focus from any buttons and inputs before closing
         $('#flightDetailsModal').find('button, input, select, textarea').blur();
-        
+
         // Remove any active focus from the modal
         $('#flightDetailsModal').find(':focus').blur();
-        
+
         // Close the modal properly
         $('#flightDetailsModal').modal('hide');
-        
+
         // Ensure aria-hidden is set properly during the closing process
         setTimeout(function() {
             $('#flightDetailsModal').attr('aria-hidden', 'true');
@@ -512,12 +450,12 @@ $(document).ready(function() {
     function saveFlightDetails(forceSave = false) {
         const form = $('#flightDetailsForm');
         let formData = form.serialize();
-        
+
         // Add force_save parameter if this is a forced save
         if (forceSave) {
             formData += '&force_save=true';
         }
-        
+
         // Show loading state
         $('#saveFlightDetails').prop('disabled', true).html('<i class="fa fa-spinner fa-spin mr-1"></i> Saving...');
 
@@ -532,7 +470,7 @@ $(document).ready(function() {
                 if (response.overlap_detected && !forceSave) {
                     // Show browser confirmation dialog for overlap
                     const userConfirmed = confirm(response.overlap_message);
-                    
+
                     if (userConfirmed) {
                         // User wants to proceed, save with force flag
                         saveFlightDetails(true);
@@ -543,7 +481,7 @@ $(document).ready(function() {
                         return;
                     }
                 }
-                
+
                 if (response.success) {
                     // Show success message
                     $('#flightDetailsContent').prepend(`
@@ -552,7 +490,7 @@ $(document).ready(function() {
                             <i class="fa fa-check mr-2"></i>${response.message || 'Flight details updated successfully!'}
                         </div>
                     `);
-                    
+
                     // Reload the page after a short delay to show updated bay assignments
                     setTimeout(function() {
                         window.location.reload();

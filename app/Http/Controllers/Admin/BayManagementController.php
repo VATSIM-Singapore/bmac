@@ -46,8 +46,7 @@ class BayManagementController extends Controller
         // Generate 5-minute time slots
         $timeSlots = $this->generateTimeSlots($timeRange['start'], $timeRange['end']);
 
-        // Build bay usage matrix
-        $bayUsage = $this->buildBayUsageMatrix($bays, $flights, $timeSlots, $event);
+        $bayUsage = $this->buildBayUsage($bays, $flights, $timeSlots, $event);
 
         return view('admin.bay-management.index', compact(
             'event',
@@ -66,31 +65,22 @@ class BayManagementController extends Controller
 
         // Expand based on actual bay assignments
         foreach ($flights as $flight) {
-            if ($flight->dep_bay_assigned_from) {
-                $assignmentStart = Carbon::parse($flight->dep_bay_assigned_from);
-                if ($assignmentStart->lt($startTime)) {
-                    $startTime = $assignmentStart;
-                }
-            }
+            $times = [
+                $flight->dep_bay_assigned_from,
+                $flight->dep_bay_assigned_to,
+                $flight->arr_bay_assigned_from,
+                $flight->arr_bay_assigned_to
+            ];
 
-            if ($flight->dep_bay_assigned_to) {
-                $assignmentEnd = Carbon::parse($flight->dep_bay_assigned_to);
-                if ($assignmentEnd->gt($endTime)) {
-                    $endTime = $assignmentEnd;
-                }
-            }
-
-            if ($flight->arr_bay_assigned_from) {
-                $assignmentStart = Carbon::parse($flight->arr_bay_assigned_from);
-                if ($assignmentStart->lt($startTime)) {
-                    $startTime = $assignmentStart;
-                }
-            }
-
-            if ($flight->arr_bay_assigned_to) {
-                $assignmentEnd = Carbon::parse($flight->arr_bay_assigned_to);
-                if ($assignmentEnd->gt($endTime)) {
-                    $endTime = $assignmentEnd;
+            foreach ($times as $time) {
+                if ($time) {
+                    $parsedTime = Carbon::parse($time);
+                    if ($parsedTime->lt($startTime)) {
+                        $startTime = $parsedTime;
+                    }
+                    if ($parsedTime->gt($endTime)) {
+                        $endTime = $parsedTime;
+                    }
                 }
             }
         }
@@ -103,7 +93,6 @@ class BayManagementController extends Controller
 
     private function generateTimeSlots(Carbon $start, Carbon $end)
     {
-        $slots = collect();
         $current = $start->copy()->startOfHour();
 
         // Round to nearest 5-minute interval
@@ -111,35 +100,49 @@ class BayManagementController extends Controller
         $roundedMinutes = floor($minutes / 5) * 5;
         $current->minute($roundedMinutes)->second(0);
 
-        while ($current->lte($end)) {
-            $slots->push($current->copy());
+        // Pre-allocate array size for better memory efficiency
+        $totalSlots = (int) ceil($end->diffInMinutes($current) / 5);
+        $slots = array_fill(0, $totalSlots, null);
+
+        for ($i = 0; $i < $totalSlots; $i++) {
+            $slots[$i] = $current->copy();
             $current->addMinutes(5);
         }
 
         return $slots;
     }
 
-    private function buildBayUsageMatrix($bays, $flights, $timeSlots, $event)
+    /**
+     * Build bay usage data structure using sparse matrix approach
+     */
+    private function buildBayUsage($bays, $flights, $timeSlots, $event)
     {
+        // Use sparse matrix - only store non-empty slots
         $matrix = [];
+        $bayIds = $bays->pluck('id')->toArray();
 
-        // Initialize matrix
-        foreach ($bays as $bay) {
-            $matrix[$bay->id] = [];
-            foreach ($timeSlots as $timeSlot) {
-                $matrix[$bay->id][$timeSlot->format('Y-m-d H:i')] = [];
-            }
+        // Pre-allocate bay arrays
+        foreach ($bayIds as $bayId) {
+            $matrix[$bayId] = [];
         }
 
-        // Fill matrix with flight assignments
+        // Process flights
         foreach ($flights as $flight) {
             $this->addFlightToMatrix($matrix, $flight, $timeSlots, $event, 'departure');
             $this->addFlightToMatrix($matrix, $flight, $timeSlots, $event, 'arrival');
         }
 
+        // Organize data for view display - group by row for each bay
+        foreach ($bayIds as $bayId) {
+            $matrix[$bayId] = $this->organizeBayDataForView($matrix[$bayId], $timeSlots);
+        }
+
         return $matrix;
     }
 
+    /**
+     * Add flight to matrix using interval-based approach
+     */
     private function addFlightToMatrix(&$matrix, $flight, $timeSlots, $event, $type)
     {
         $bayId = null;
@@ -166,26 +169,14 @@ class BayManagementController extends Controller
         $assignedFrom = Carbon::parse($assignedFrom);
         $assignedTo = Carbon::parse($assignedTo);
 
-        // Calculate which time slots this assignment spans
-        $affectedSlots = [];
-        $spanCount = 0;
-
-        foreach ($timeSlots as $index => $timeSlot) {
-            $slotStart = $timeSlot->copy();
-            $slotEnd = $timeSlot->copy()->addMinutes(5);
-
-            // Check if this slot overlaps with the assignment
-            if ($slotStart->lt($assignedTo) && $slotEnd->gt($assignedFrom)) {
-                $affectedSlots[] = $index;
-                $spanCount++;
-            }
-        }
+        // Use binary search to find affected time slots
+        $affectedSlots = $this->findAffectedTimeSlots($timeSlots, $assignedFrom, $assignedTo);
 
         if (empty($affectedSlots)) {
             return;
         }
 
-        // Create assignment data
+        // Create assignment data once
         $callsign = $flight->booking->callsign ?? 'Unknown';
         if ($flight->booking->user_id) {
             $callsign .= ' - ' . $flight->booking->user_id;
@@ -194,7 +185,7 @@ class BayManagementController extends Controller
         $assignmentData = [
             'flight' => $flight,
             'type' => $type,
-            'colspan' => $spanCount,
+            'colspan' => count($affectedSlots),
             'callsign' => $callsign,
             'aircraft_type' => $flight->booking->acType ?? 'Unknown',
             'relevant_airport' => $type === 'departure' ?
@@ -207,33 +198,98 @@ class BayManagementController extends Controller
             'time_to' => $assignedTo->format('H:i')
         ];
 
-        // Add flight to every time slot it occupies, but only with colspan on the first occurrence
-        foreach ($affectedSlots as $slotIndex => $timeSlotIndex) {
+        // Add flight to affected time slots
+        foreach ($affectedSlots as $index => $timeSlotIndex) {
             $timeSlot = $timeSlots[$timeSlotIndex];
             $timeKey = $timeSlot->format('Y-m-d H:i');
 
-            if (isset($matrix[$bayId][$timeKey])) {
-                // Check if this flight is already in this time slot
-                $alreadyExists = false;
-                foreach ($matrix[$bayId][$timeKey] as $existing) {
-                    if (isset($existing['flight']) &&
-                        $existing['flight']->id === $flight->id &&
-                        $existing['type'] === $type) {
-                        $alreadyExists = true;
-                        break;
-                    }
-                }
+            if (!isset($matrix[$bayId][$timeKey])) {
+                $matrix[$bayId][$timeKey] = [];
+            }
 
-                if (!$alreadyExists) {
-                    $slotData = $assignmentData;
-                    // Only apply colspan to the first slot, others get colspan=1
-                    if ($slotIndex > 0) {
-                        $slotData['colspan'] = 1;
-                    }
-                    $matrix[$bayId][$timeKey][] = $slotData;
+            // Check for duplicates
+            $alreadyExists = false;
+
+            foreach ($matrix[$bayId][$timeKey] as $existing) {
+                if (isset($existing['flight']) &&
+                    $existing['flight']->id === $flight->id &&
+                    $existing['type'] === $type) {
+                    $alreadyExists = true;
+                    break;
+                }
+            }
+
+            if (!$alreadyExists) {
+                $slotData = $assignmentData;
+                // Only apply colspan to the first slot
+                if ($index > 0) {
+                    $slotData['colspan'] = 1;
+                }
+                $matrix[$bayId][$timeKey][] = $slotData;
+            }
+        }
+    }
+
+    /**
+     * Find affected time slots using binary search
+     */
+    private function findAffectedTimeSlots($timeSlots, Carbon $start, Carbon $end)
+    {
+        $affectedSlots = [];
+        $count = count($timeSlots);
+
+        // Binary search for start index
+        $startIndex = $this->binarySearchTimeSlot($timeSlots, $start, 0, $count - 1);
+
+        // Binary search for end index
+        $endIndex = $this->binarySearchTimeSlot($timeSlots, $end, 0, $count - 1);
+
+        // Adjust indices to ensure we capture all overlapping slots
+        if ($startIndex > 0) {
+            $startIndex--;
+        }
+        if ($endIndex < $count - 1) {
+            $endIndex++;
+        }
+
+        // Collect all affected slots
+        for ($i = $startIndex; $i <= $endIndex; $i++) {
+            if ($i >= 0 && $i < $count) {
+                $timeSlot = $timeSlots[$i];
+                $slotStart = $timeSlot->copy();
+                $slotEnd = $timeSlot->copy()->addMinutes(5);
+
+                // Check if this slot overlaps with the assignment
+                if ($slotStart->lt($end) && $slotEnd->gt($start)) {
+                    $affectedSlots[] = $i; // Just store the index, not the full data
                 }
             }
         }
+
+        return $affectedSlots;
+    }
+
+    /**
+     * Binary search to find the closest time slot index
+     */
+    private function binarySearchTimeSlot($timeSlots, Carbon $target, $left, $right)
+    {
+        if ($left > $right) {
+            return $left;
+        }
+
+        $mid = (int) (($left + $right) / 2);
+        $midTime = $timeSlots[$mid];
+
+        if ($midTime->eq($target)) {
+            return $mid;
+        }
+
+        if ($midTime->lt($target)) {
+            return $this->binarySearchTimeSlot($timeSlots, $target, $mid + 1, $right);
+        }
+
+        return $this->binarySearchTimeSlot($timeSlots, $target, $left, $mid - 1);
     }
 
     public function getFlightDetails(Event $event, Flight $flight, Request $request): JsonResponse
@@ -282,10 +338,6 @@ class BayManagementController extends Controller
 
         $assignmentType = $request->get('assignment_type', 'departure');
 
-        // Validate the request
-        $rules = [];
-        $data = [];
-
         if ($assignmentType === 'departure') {
             $rules = [
                 'dep_bay' => 'nullable|exists:bays,id',
@@ -316,7 +368,7 @@ class BayManagementController extends Controller
             ];
         }
 
-        $validated = $request->validate($rules);
+        $request->validate($rules);
 
         try {
             // Check for overlapping bookings
@@ -345,15 +397,11 @@ class BayManagementController extends Controller
         }
     }
 
+    /**
+     * Overlap detection using interval-based approach
+     */
     private function checkForOverlappingBookings(Flight $currentFlight, string $assignmentType, array $data, Event $event): ?string
     {
-        $bayId = null;
-        $assignedFrom = null;
-        $assignedTo = null;
-        $bayField = null;
-        $fromField = null;
-        $toField = null;
-
         if ($assignmentType === 'departure') {
             $bayId = $data['dep_bay'] ?? null;
             $assignedFrom = $data['dep_bay_assigned_from'] ?? null;
@@ -375,21 +423,16 @@ class BayManagementController extends Controller
             return null;
         }
 
-        // Find overlapping flights for the same bay and event
         $overlappingFlights = Flight::whereHas('booking', function ($query) use ($event) {
             $query->where('event_id', $event->id);
         })
-        ->where('id', '!=', $currentFlight->id) // Exclude current flight
+        ->where('id', '!=', $currentFlight->id)
         ->where($bayField, $bayId)
         ->whereNotNull($fromField)
         ->whereNotNull($toField)
         ->where(function ($query) use ($fromField, $toField, $assignedFrom, $assignedTo) {
-            // Check for overlapping time ranges
-            $query->where(function ($q) use ($fromField, $toField, $assignedFrom, $assignedTo) {
-                // Case 1: New booking starts before existing ends and ends after existing starts
-                $q->where($fromField, '<', $assignedTo)
+            $query->where($fromField, '<', $assignedTo)
                   ->where($toField, '>', $assignedFrom);
-            });
         })
         ->with(['booking'])
         ->get();
@@ -398,7 +441,6 @@ class BayManagementController extends Controller
             return null;
         }
 
-        // Build warning message
         $bayName = \App\Models\Bay::find($bayId)?->name ?? 'Unknown';
         $overlappingDetails = [];
 
@@ -416,5 +458,97 @@ class BayManagementController extends Controller
         $overlappingText = implode(', ', $overlappingDetails);
 
         return "Bay {$bayName} {$typeLabel} assignment ({$newFromTime}-{$newToTime}) overlaps with existing booking(s): {$overlappingText}. Do you want to proceed anyway?";
+    }
+
+    /**
+     * Organize bay data for view display by grouping flights into rows
+     */
+    private function organizeBayDataForView($bayData, $timeSlots)
+    {
+        $organizedData = [];
+
+        // Safety check: ensure bayData is an array
+        if (!is_array($bayData)) {
+            return $organizedData;
+        }
+
+        // First, collect all unique flights for this bay
+        $uniqueFlights = [];
+        foreach ($bayData as $timeKey => $assignments) {
+            if (is_array($assignments)) {
+                foreach ($assignments as $assignment) {
+                    if ($assignment && isset($assignment['flight']) && isset($assignment['type'])) {
+                        $flightKey = $assignment['flight']->id . '_' . $assignment['type'];
+                        if (!isset($uniqueFlights[$flightKey])) {
+                            $uniqueFlights[$flightKey] = $assignment;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Smart row allocation - assign flights to rows based on time conflicts
+        $flightToRowMap = [];
+        $rowOccupancy = []; // Track which time ranges each row occupies
+
+        foreach ($uniqueFlights as $flightKey => $flight) {
+            $assigned = false;
+            $flightStart = $flight['time_from'];
+            $flightEnd = $flight['time_to'];
+
+            // Try to assign to an existing row that doesn't conflict
+            foreach ($rowOccupancy as $rowIndex => $occupiedRanges) {
+                $canUseRow = true;
+                foreach ($occupiedRanges as $range) {
+                    // Check if flight times overlap with existing range
+                    if ($flightStart < $range['end'] && $flightEnd > $range['start']) {
+                        $canUseRow = false;
+                        break;
+                    }
+                }
+
+                if ($canUseRow) {
+                    $flightToRowMap[$flightKey] = $rowIndex;
+                    $rowOccupancy[$rowIndex][] = ['start' => $flightStart, 'end' => $flightEnd];
+                    $assigned = true;
+                    break;
+                }
+            }
+
+            // If no existing row works, create a new one
+            if (!$assigned) {
+                $newRowIndex = count($rowOccupancy);
+                $flightToRowMap[$flightKey] = $newRowIndex;
+                $rowOccupancy[$newRowIndex] = [['start' => $flightStart, 'end' => $flightEnd]];
+            }
+        }
+
+        // Organize data by time slot and row
+        foreach ($timeSlots as $timeSlot) {
+            $timeKey = $timeSlot->format('Y-m-d H:i');
+            $assignments = $bayData[$timeKey] ?? [];
+
+            // Initialize row array for this time slot
+            $organizedData[$timeKey] = [];
+
+            // Place assignments in their designated rows
+            if (is_array($assignments)) {
+                foreach ($assignments as $assignment) {
+                    if ($assignment && isset($assignment['flight']) && isset($assignment['type'])) {
+                        $flightKey = $assignment['flight']->id . '_' . $assignment['type'];
+                        $rowIndex = $flightToRowMap[$flightKey] ?? 0;
+
+                        // Ensure the row exists
+                        while (count($organizedData[$timeKey]) <= $rowIndex) {
+                            $organizedData[$timeKey][] = null;
+                        }
+
+                        $organizedData[$timeKey][$rowIndex] = $assignment;
+                    }
+                }
+            }
+        }
+
+        return $organizedData;
     }
 }

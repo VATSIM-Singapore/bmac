@@ -412,7 +412,7 @@ $(document).ready(function() {
 
         // Load flight details via AJAX
         $.ajax({
-            url: '{{ route("admin.events.bay-management.flight-details", [$event, "__FLIGHT_ID__"], false) }}'.replace('__FLIGHT_ID__', flightId),
+            url: '{{ route("admin.events.bay-management.flight-details", [$event, "__FLIGHT_ID__"]) }}'.replace('__FLIGHT_ID__', flightId),
             method: 'GET',
             data: { assignment_type: assignmentType },
             success: function(response) {

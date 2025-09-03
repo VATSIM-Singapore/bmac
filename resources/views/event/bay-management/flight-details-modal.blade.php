@@ -160,6 +160,25 @@
     @endif
 </form>
 
+<style>
+.btn-loading {
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.btn-loading:hover {
+    opacity: 0.7;
+}
+
+/* Disable form inputs during submission */
+.form-disabled input,
+.form-disabled select,
+.form-disabled textarea {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+</style>
+
 <script>
 // Add some basic validation and datetime handling
 $(document).ready(function() {
@@ -197,5 +216,144 @@ $(document).ready(function() {
             $(this).val('');
         }
     });
+
+    // Handle form submission to prevent multiple submissions
+    $('#flightDetailsForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        // Get the save button
+        const saveButton = $('#saveFlightDetails');
+        
+        // Disable the save button and show loading state
+        saveButton.prop('disabled', true)
+            .html('<i class="fa fa-spinner fa-spin mr-1"></i> Saving...')
+            .addClass('btn-loading');
+        
+        // Disable all form inputs during submission
+        $(this).find('input, select, textarea').prop('disabled', true);
+        
+        // Submit the form via AJAX
+        $.ajax({
+            url: $(this).attr('action'),
+            method: 'POST',
+            data: $(this).serialize(),
+            headers: {
+                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+            },
+            success: function(response) {
+                if (response.overlap_detected) {
+                    // Show browser confirmation dialog for overlap
+                    const userConfirmed = confirm(response.overlap_message);
+                    
+                    if (userConfirmed) {
+                        // User wants to proceed, save with force flag
+                        submitFormWithForceFlag();
+                    } else {
+                        // User cancelled, reset button state
+                        resetFormState();
+                    }
+                    return;
+                }
+                
+                if (response.success) {
+                    // Show success message
+                    $('#flightDetailsContent').prepend(`
+                        <div class="alert alert-success alert-dismissible">
+                            <button type="button" class="close" data-dismiss="alert">&times;</button>
+                            <i class="fa fa-check mr-2"></i>${response.message || 'Flight details updated successfully!'}
+                        </div>
+                    `);
+                    
+                    // Reload the page after a short delay to show updated bay assignments
+                    setTimeout(function() {
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    $('#flightDetailsContent').prepend(`
+                        <div class="alert alert-danger alert-dismissible">
+                            <button type="button" class="close" data-dismiss="alert">&times;</button>
+                            <i class="fa fa-exclamation-triangle mr-2"></i>${response.message || 'Error saving flight details.'}
+                        </div>
+                    `);
+                    resetFormState();
+                }
+            },
+            error: function(xhr, status, error) {
+                const errorMsg = xhr.responseJSON?.message || 'Error saving flight details. Please try again.';
+                $('#flightDetailsContent').prepend(`
+                    <div class="alert alert-danger alert-dismissible">
+                        <button type="button" class="close" data-dismiss="alert">&times;</button>
+                        <i class="fa fa-exclamation-triangle mr-2"></i>${errorMsg}
+                    </div>
+                `);
+                console.error('Error saving flight details:', error);
+                resetFormState();
+            }
+        });
+    });
+
+    // Function to submit form with force flag
+    function submitFormWithForceFlag() {
+        const form = $('#flightDetailsForm');
+        const formData = form.serialize() + '&force_save=true';
+        
+        $.ajax({
+            url: form.attr('action'),
+            method: 'POST',
+            data: formData,
+            headers: {
+                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+            },
+            success: function(response) {
+                if (response.success) {
+                    // Show success message
+                    $('#flightDetailsContent').prepend(`
+                        <div class="alert alert-success alert-dismissible">
+                            <button type="button" class="close" data-dismiss="alert">&times;</button>
+                            <i class="fa fa-check mr-2"></i>${response.message || 'Flight details updated successfully!'}
+                        </div>
+                    `);
+                    
+                    // Reload the page after a short delay to show updated bay assignments
+                    setTimeout(function() {
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    $('#flightDetailsContent').prepend(`
+                        <div class="alert alert-danger alert-dismissible">
+                            <button type="button" class="close" data-dismiss="alert">&times;</button>
+                            <i class="fa fa-exclamation-triangle mr-2"></i>${response.message || 'Error saving flight details.'}
+                        </div>
+                    `);
+                    resetFormState();
+                }
+            },
+            error: function(xhr, status, error) {
+                const errorMsg = xhr.responseJSON?.message || 'Error saving flight details. Please try again.';
+                $('#flightDetailsContent').prepend(`
+                    <div class="alert alert-danger alert-dismissible">
+                        <button type="button" class="close" data-dismiss="alert">&times;</button>
+                        <i class="fa fa-exclamation-triangle mr-2"></i>${errorMsg}
+                    </div>
+                `);
+                console.error('Error saving flight details:', error);
+                resetFormState();
+            }
+        });
+    }
+
+    // Function to reset form state
+    function resetFormState() {
+        const saveButton = $('#saveFlightDetails');
+        const form = $('#flightDetailsForm');
+        
+        // Re-enable the save button and restore original text
+        saveButton.prop('disabled', false)
+            .html('Save Changes')
+            .removeClass('btn-loading');
+        
+        // Re-enable all form inputs
+        form.find('input, select, textarea').prop('disabled', false);
+    }
 });
 </script>

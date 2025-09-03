@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Admin;
+namespace App\Http\Controllers\Event;
 
 use App\Http\Controllers\Controller;
 use App\Models\Event;
@@ -36,7 +36,7 @@ class BayManagementController extends Controller
             ->with(['booking', 'depBay', 'arrBay', 'airportDep', 'airportArr'])
             ->where(function ($query) {
                 $query->whereNotNull('dep_bay')
-                      ->orWhereNotNull('arr_bay');
+                    ->orWhereNotNull('arr_bay');
             })
             ->get();
 
@@ -48,7 +48,7 @@ class BayManagementController extends Controller
 
         $bayUsage = $this->buildBayUsage($bays, $flights, $timeSlots, $event);
 
-        return view('admin.bay-management.index', compact(
+        return view('event.bay-management.index', compact(
             'event',
             'bays',
             'timeSlots',
@@ -314,7 +314,7 @@ class BayManagementController extends Controller
         $bays = $cachedDataService->getSortedBays($event->dep);
 
         // Generate the modal content HTML
-        $html = view('admin.bay-management.flight-details-modal', compact(
+        $html = view('event.bay-management.flight-details-modal', compact(
             'flight',
             'event',
             'assignmentType',
@@ -426,16 +426,16 @@ class BayManagementController extends Controller
         $overlappingFlights = Flight::whereHas('booking', function ($query) use ($event) {
             $query->where('event_id', $event->id);
         })
-        ->where('id', '!=', $currentFlight->id)
-        ->where($bayField, $bayId)
-        ->whereNotNull($fromField)
-        ->whereNotNull($toField)
-        ->where(function ($query) use ($fromField, $toField, $assignedFrom, $assignedTo) {
-            $query->where($fromField, '<', $assignedTo)
-                  ->where($toField, '>', $assignedFrom);
-        })
-        ->with(['booking'])
-        ->get();
+            ->where('id', '!=', $currentFlight->id)
+            ->where($bayField, $bayId)
+            ->whereNotNull($fromField)
+            ->whereNotNull($toField)
+            ->where(function ($query) use ($fromField, $toField, $assignedFrom, $assignedTo) {
+                $query->where($fromField, '<', $assignedTo)
+                    ->where($toField, '>', $assignedFrom);
+            })
+            ->with(['booking'])
+            ->get();
 
         if ($overlappingFlights->isEmpty()) {
             return null;

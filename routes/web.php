@@ -92,11 +92,11 @@ Route::group(['as' => 'admin.', 'prefix' => 'admin', 'middleware' => 'auth.isAdm
     )->name('bookings.routeAssign');
 
     // Bay Management Routes
-    Route::get('{event}/bay-management', [App\Http\Controllers\Admin\BayManagementController::class, 'index'])
+    Route::get('{event}/bay-management', [App\Http\Controllers\Event\BayManagementController::class, 'index'])
         ->name('events.bay-management');
-    Route::get('{event}/bay-management/flight-details/{flight}', [App\Http\Controllers\Admin\BayManagementController::class, 'getFlightDetails'])
+    Route::get('{event}/bay-management/flight-details/{flight}', [App\Http\Controllers\Event\BayManagementController::class, 'getFlightDetails'])
         ->name('events.bay-management.flight-details');
-    Route::post('{event}/bay-management/flight-details/{flight}', [App\Http\Controllers\Admin\BayManagementController::class, 'updateFlightDetails'])
+    Route::post('{event}/bay-management/flight-details/{flight}', [App\Http\Controllers\Event\BayManagementController::class, 'updateFlightDetails'])
         ->name('events.bay-management.update-flight-details');
 });
 

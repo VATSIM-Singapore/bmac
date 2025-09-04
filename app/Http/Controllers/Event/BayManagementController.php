@@ -399,6 +399,7 @@ class BayManagementController extends Controller
 
     /**
      * Overlap detection using interval-based approach
+     * Checks for overlaps between ALL combinations of departure and arrival assignments on the same bay
      */
     private function checkForOverlappingBookings(Flight $currentFlight, string $assignmentType, array $data, Event $event): ?string
     {
@@ -406,16 +407,10 @@ class BayManagementController extends Controller
             $bayId = $data['dep_bay'] ?? null;
             $assignedFrom = $data['dep_bay_assigned_from'] ?? null;
             $assignedTo = $data['dep_bay_assigned_to'] ?? null;
-            $bayField = 'dep_bay';
-            $fromField = 'dep_bay_assigned_from';
-            $toField = 'dep_bay_assigned_to';
         } else {
             $bayId = $data['arr_bay'] ?? null;
             $assignedFrom = $data['arr_bay_assigned_from'] ?? null;
             $assignedTo = $data['arr_bay_assigned_to'] ?? null;
-            $bayField = 'arr_bay';
-            $fromField = 'arr_bay_assigned_from';
-            $toField = 'arr_bay_assigned_to';
         }
 
         // If no bay is assigned or no time range, no overlap possible
@@ -423,16 +418,31 @@ class BayManagementController extends Controller
             return null;
         }
 
+        // Check for overlaps with BOTH departure and arrival assignments on the same bay
         $overlappingFlights = Flight::whereHas('booking', function ($query) use ($event) {
             $query->where('event_id', $event->id);
         })
             ->where('id', '!=', $currentFlight->id)
-            ->where($bayField, $bayId)
-            ->whereNotNull($fromField)
-            ->whereNotNull($toField)
-            ->where(function ($query) use ($fromField, $toField, $assignedFrom, $assignedTo) {
-                $query->where($fromField, '<', $assignedTo)
-                    ->where($toField, '>', $assignedFrom);
+            ->where(function ($query) use ($bayId) {
+                // Check both departure and arrival bay assignments
+                $query->where('dep_bay', $bayId)
+                    ->orWhere('arr_bay', $bayId);
+            })
+            ->where(function ($query) use ($assignedFrom, $assignedTo) {
+                // Check for time overlaps with departure assignments
+                $query->where(function ($subQuery) use ($assignedFrom, $assignedTo) {
+                    $subQuery->whereNotNull('dep_bay_assigned_from')
+                        ->whereNotNull('dep_bay_assigned_to')
+                        ->where('dep_bay_assigned_from', '<', $assignedTo)
+                        ->where('dep_bay_assigned_to', '>', $assignedFrom);
+                })
+                // Check for time overlaps with arrival assignments
+                ->orWhere(function ($subQuery) use ($assignedFrom, $assignedTo) {
+                    $subQuery->whereNotNull('arr_bay_assigned_from')
+                        ->whereNotNull('arr_bay_assigned_to')
+                        ->where('arr_bay_assigned_from', '<', $assignedTo)
+                        ->where('arr_bay_assigned_to', '>', $assignedFrom);
+                });
             })
             ->with(['booking'])
             ->get();
@@ -446,9 +456,36 @@ class BayManagementController extends Controller
 
         foreach ($overlappingFlights as $overlappingFlight) {
             $callsign = $overlappingFlight->booking->callsign ?? 'Unknown';
-            $fromTime = Carbon::parse($overlappingFlight->{$fromField})->format('H:i');
-            $toTime = Carbon::parse($overlappingFlight->{$toField})->format('H:i');
-            $overlappingDetails[] = "{$callsign} ({$fromTime}-{$toTime})";
+
+            // Check which type of assignment overlaps and get the times
+            $overlapType = '';
+            $fromTime = '';
+            $toTime = '';
+
+            // Check if departure assignment overlaps
+            if ($overlappingFlight->dep_bay == $bayId &&
+                $overlappingFlight->dep_bay_assigned_from &&
+                $overlappingFlight->dep_bay_assigned_to &&
+                $overlappingFlight->dep_bay_assigned_from < $assignedTo &&
+                $overlappingFlight->dep_bay_assigned_to > $assignedFrom) {
+                $overlapType = 'departure';
+                $fromTime = Carbon::parse($overlappingFlight->dep_bay_assigned_from)->format('H:i');
+                $toTime = Carbon::parse($overlappingFlight->dep_bay_assigned_to)->format('H:i');
+            }
+            // Check if arrival assignment overlaps
+            elseif ($overlappingFlight->arr_bay == $bayId &&
+                    $overlappingFlight->arr_bay_assigned_from &&
+                    $overlappingFlight->arr_bay_assigned_to &&
+                    $overlappingFlight->arr_bay_assigned_from < $assignedTo &&
+                    $overlappingFlight->arr_bay_assigned_to > $assignedFrom) {
+                $overlapType = 'arrival';
+                $fromTime = Carbon::parse($overlappingFlight->arr_bay_assigned_from)->format('H:i');
+                $toTime = Carbon::parse($overlappingFlight->arr_bay_assigned_to)->format('H:i');
+            }
+
+            if ($overlapType) {
+                $overlappingDetails[] = "{$callsign} ({$overlapType}: {$fromTime}-{$toTime})";
+            }
         }
 
         $typeLabel = $assignmentType === 'departure' ? 'departure' : 'arrival';

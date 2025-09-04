@@ -85,7 +85,7 @@
                 </td>
                 <td class="text-center">
                     @if ($flight->arrBay)
-                        <span class="badge badge-success">{{ $flight->arrBay->name }}</span>
+                        <span class="badge badge-warning">{{ $flight->arrBay->name }}</span>
                     @else
                         <span class="text-muted">-</span>
                     @endif

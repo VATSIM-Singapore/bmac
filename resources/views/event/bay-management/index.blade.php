@@ -23,7 +23,7 @@
                 <div class="text-right">
                     <small class="text-muted d-block mb-1"><i class="fa fa-info-circle mr-1"></i>Legend:</small>
                     <div>
-                        <span class="badge badge-success mr-1">Arrival</span>
+                        <span class="badge badge-warning mr-1">Arrival</span>
                         <span class="badge badge-info">Departure</span>
                     </div>
                 </div>
@@ -86,7 +86,7 @@
 
                                         @if($assignment)
                                             @php
-                                                $cssClass = $assignment['type'] === 'departure' ? 'bg-info text-white' : 'bg-success text-white';
+                                                $cssClass = $assignment['type'] === 'departure' ? 'bg-info text-white' : 'bg-warning text-white';
                                                 $colspan = $assignment['colspan'] ?? 1;
 
                                                 // Only add cells to skip if colspan > 1

@@ -320,45 +320,31 @@
 @push('scripts')
 <script>
 $(document).ready(function() {
-    // Handle flight assignment cell clicks
-    $('.flight-assignment-cell').on('click', function(e) {
-        e.stopPropagation();
-
-        // Check if clicked on a specific flight details div
-        const clickedFlightDetails = $(e.target).closest('.flight-details-row');
-
-        let flightId, assignmentType;
-
-        if (clickedFlightDetails.length > 0 && clickedFlightDetails.data('flight-id')) {
-            // Clicked on a specific flight within the cell
-            flightId = clickedFlightDetails.data('flight-id');
-            assignmentType = clickedFlightDetails.data('assignment-type');
-        } else {
-            // Clicked on the cell itself, use the first flight
-            flightId = $(this).data('flight-id');
-            assignmentType = $(this).data('assignment-type');
-        }
-
-        if (flightId) {
-            loadFlightDetails(flightId, assignmentType);
-        }
-    });
-
-    // Also handle direct clicks on flight details divs for multiple flights
-    $(document).on('click', '.flight-details-row[data-flight-id]', function(e) {
-        e.stopPropagation();
-        const flightId = $(this).data('flight-id');
-        const assignmentType = $(this).data('assignment-type');
-
-        if (flightId) {
-            loadFlightDetails(flightId, assignmentType);
-        }
-    });
+    // Initialize table event handlers
+    initializeTableEventHandlers();
 
     // Handle save button click
     $('#saveFlightDetails').on('click', function() {
         saveFlightDetails();
     });
+
+    function initializeTableEventHandlers() {
+        $(document).off('click', '.flight-assignment-cell').on('click', '.flight-assignment-cell', function(e) {
+            e.stopPropagation();
+
+            // Focus tracking
+            $('.flight-assignment-cell').removeClass('last-clicked');
+            $(this).addClass('last-clicked');
+
+            // Get flight data from the cell itself
+            const flightId = $(this).data('flight-id');
+            const assignmentType = $(this).data('assignment-type');
+
+            if (flightId) {
+                loadFlightDetails(flightId, assignmentType);
+            }
+        });
+    }
 
     // Handle close button click
     $('#closeModalBtn').on('click', function() {
@@ -391,12 +377,6 @@ $(document).ready(function() {
         }
     });
 
-    // Track the last clicked cell for focus return
-    $('.flight-assignment-cell, .flight-details-row[data-flight-id]').on('click', function() {
-        $('.flight-assignment-cell').removeClass('last-clicked');
-        const cell = $(this).hasClass('flight-assignment-cell') ? $(this) : $(this).closest('.flight-assignment-cell');
-        cell.addClass('last-clicked');
-    });
 
     function loadFlightDetails(flightId, assignmentType) {
         // Show modal with loading state
@@ -483,35 +463,23 @@ $(document).ready(function() {
                 }
 
                 if (response.success) {
-                    // Show success message
-                    $('#flightDetailsContent').prepend(`
-                        <div class="alert alert-success alert-dismissible">
-                            <button type="button" class="close" data-dismiss="alert">&times;</button>
-                            <i class="fa fa-check mr-2"></i>${response.message || 'Flight details updated successfully!'}
-                        </div>
-                    `);
+                    // Close modal immediately
+                    closeModal();
 
-                    // Reload the page after a short delay to show updated bay assignments
-                    setTimeout(function() {
-                        window.location.reload();
-                    }, 1500);
+                    // Show success message below breadcrumbs
+                    showMessage('success', response.message || 'Flight details updated successfully!');
+
+                    // Reload only the table/matrix
+                    reloadBayMatrix();
                 } else {
-                    $('#flightDetailsContent').prepend(`
-                        <div class="alert alert-danger alert-dismissible">
-                            <button type="button" class="close" data-dismiss="alert">&times;</button>
-                            <i class="fa fa-exclamation-triangle mr-2"></i>${response.message || 'Error saving flight details.'}
-                        </div>
-                    `);
+                    // Show error message in the modal
+                    showModalMessage('danger', response.message || 'Error saving flight details.');
                 }
             },
             error: function(xhr, status, error) {
                 const errorMsg = xhr.responseJSON?.message || 'Error saving flight details. Please try again.';
-                $('#flightDetailsContent').prepend(`
-                    <div class="alert alert-danger alert-dismissible">
-                        <button type="button" class="close" data-dismiss="alert">&times;</button>
-                        <i class="fa fa-exclamation-triangle mr-2"></i>${errorMsg}
-                    </div>
-                `);
+                // Show error message in the modal
+                showModalMessage('danger', errorMsg);
                 console.error('Error saving flight details:', error);
             },
             complete: function() {
@@ -519,6 +487,106 @@ $(document).ready(function() {
             }
         });
     }
+
+    function showMessage(type, message) {
+        // Remove any existing messages
+        $('.bay-management-message').remove();
+
+        // Create message element
+        const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+        const iconClass = type === 'success' ? 'fa-check' : 'fa-exclamation-triangle';
+
+        const messageHtml = `
+            <div class="alert ${alertClass} alert-dismissible bay-management-message" role="alert">
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+                <i class="fa ${iconClass} mr-2"></i>${message}
+            </div>
+        `;
+
+        // Insert message below breadcrumbs
+        $('.container-fluid .row .col-12 .mb-3').after(messageHtml);
+
+        // Auto-dismiss success messages after 5 seconds
+        if (type === 'success') {
+            setTimeout(function() {
+                $('.bay-management-message').fadeOut(function() {
+                    $(this).remove();
+                });
+            }, 5000);
+        }
+    }
+
+    function showModalMessage(type, message) {
+        // Remove any existing modal messages
+        $('.modal-message').remove();
+
+        // Create message element
+        const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+        const iconClass = type === 'success' ? 'fa-check' : 'fa-exclamation-triangle';
+
+        const messageHtml = `
+            <div class="alert ${alertClass} alert-dismissible modal-message" role="alert">
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+                <i class="fa ${iconClass} mr-2"></i>${message}
+            </div>
+        `;
+
+        // Insert message at the top of the modal body
+        $('#flightDetailsContent').prepend(messageHtml);
+
+        // Auto-dismiss success messages after 5 seconds
+        if (type === 'success') {
+            setTimeout(function() {
+                $('.modal-message').fadeOut(function() {
+                    $(this).remove();
+                });
+            }, 5000);
+        }
+    }
+
+    function reloadBayMatrix() {
+        // Show loading indicator
+        $('.table-container').prepend(`
+            <div class="text-center p-3" id="tableLoadingIndicator">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="sr-only">Loading...</span>
+                </div>
+                <div class="mt-2">Updating bay assignments...</div>
+            </div>
+        `);
+
+        // Reload the page content via AJAX
+        $.ajax({
+            url: window.location.href,
+            method: 'GET',
+            success: function(response) {
+                // Extract the table content from the response
+                const $newContent = $(response);
+                const $newTable = $newContent.find('.table-container');
+
+                if ($newTable.length > 0) {
+                    // Replace the table container
+                    $('.table-container').replaceWith($newTable);
+
+                    // Re-bind event handlers for the new table
+                    initializeTableEventHandlers();
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error reloading bay matrix:', error);
+                showMessage('danger', 'Error updating bay assignments. Please refresh the page.');
+            },
+            complete: function() {
+                // Remove loading indicator
+                $('#tableLoadingIndicator').remove();
+            }
+        });
+    }
+
 });
 </script>
 @endpush

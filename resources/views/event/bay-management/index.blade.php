@@ -212,7 +212,7 @@
     }
 
     .gate-table th:first-child {
-        z-index: 11;
+        z-index: 13;
     }
 
     .gate-table td {

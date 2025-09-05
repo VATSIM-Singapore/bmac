@@ -10,6 +10,30 @@
         </div>
     </div>
 
+    <!-- Filters -->
+    <div class="card mb-3 gate-filter-card">
+        <div class="card-body">
+            <div class="row align-items-center">
+                <div class="col-md-3">
+                    <label for="gateFilter" class="form-label mb-0">
+                        <i class="fa fa-filter mr-1"></i>Filter by Gate:
+                    </label>
+                </div>
+                <div class="col-md-3">
+                    <input type="text" id="gateFilter" class="form-control" placeholder="Enter gate name (e.g., A, C1, etc.)">
+                </div>
+                <div class="col-md-3">
+                    <label for="aircraftFilter" class="form-label mb-0">
+                        <i class="fa fa-plane mr-1"></i>Filter by Aircraft Type:
+                    </label>
+                </div>
+                <div class="col-md-3">
+                    <input type="text" id="aircraftFilter" class="form-control" placeholder="Enter aircraft type (e.g., B738, A320, etc.)">
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Bay Assignment Table -->
     <div class="card mb-3">
         <div class="card-header">
@@ -57,7 +81,7 @@
 
                             {{-- Create sub-rows for this bay --}}
                             @for($subRow = 0; $subRow < $maxOverlaps; $subRow++)
-                                <tr class="{{ $subRow > 0 ? 'bay-sub-row' : 'bay-main-row' }}">
+                                <tr class="{{ $subRow > 0 ? 'bay-sub-row' : 'bay-main-row' }}" data-gate="{{ $bay->name }}">
                                     @if($subRow === 0)
                                         <td class="bg-dark text-white font-weight-bold sticky-gate-cell"
                                             rowspan="{{ $maxOverlaps }}">
@@ -103,6 +127,7 @@
                                                 @endif
                                                 data-flight-id="{{ $assignment['flight']->id }}"
                                                 data-assignment-type="{{ $assignment['type'] }}"
+                                                data-aircraft-type="{{ $assignment['aircraft_type'] ?? 'Unknown' }}"
                                                 style="cursor: pointer;"
                                                 title="Click to view/edit flight details"
                                                 tabindex="0"
@@ -313,6 +338,25 @@
         margin-bottom: 1rem;
     }
 
+    /* Filter Styling */
+    #gateFilter, #aircraftFilter {
+        min-width: 150px;
+    }
+
+    .gate-filter-card {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+    }
+
+    .gate-filter-card .card-body {
+        padding: 1rem;
+    }
+
+    .form-label {
+        font-weight: 600;
+        color: #495057;
+    }
+
     /* Clean up since we're using real table rows now */
 </style>
 @endpush
@@ -322,6 +366,9 @@
 $(document).ready(function() {
     // Initialize table event handlers
     initializeTableEventHandlers();
+
+    // Initialize gate filter
+    initializeGateFilter();
 
     // Handle save button click
     $('#saveFlightDetails').on('click', function() {
@@ -342,6 +389,65 @@ $(document).ready(function() {
 
             if (flightId) {
                 loadFlightDetails(flightId, assignmentType);
+            }
+        });
+    }
+
+    function initializeGateFilter() {
+        $('#gateFilter').on('input', function() {
+            applyFilters();
+        });
+
+        $('#aircraftFilter').on('input', function() {
+            applyFilters();
+        });
+    }
+
+    function applyFilters() {
+        const gateFilterText = $('#gateFilter').val().trim();
+        const aircraftFilterText = $('#aircraftFilter').val().trim();
+
+        const $tableRows = $('.gate-table tbody tr');
+
+        $tableRows.each(function() {
+            const $row = $(this);
+            const gateName = $row.data('gate');
+            let showRow = true;
+
+            // Apply gate filter - this controls row visibility
+            if (gateFilterText) {
+                if (!gateName || typeof gateName !== 'string' || !gateName.toLowerCase().startsWith(gateFilterText.toLowerCase())) {
+                    showRow = false;
+                }
+            }
+
+            // Show or hide the entire row based on gate filter
+            if (showRow) {
+                $row.show();
+
+                // Apply aircraft filter to flight cells within visible rows
+                if (aircraftFilterText) {
+                    const $flightCells = $row.find('.flight-assignment-cell');
+
+                    $flightCells.each(function() {
+                        const $cell = $(this);
+                        const aircraftType = $cell.data('aircraft-type');
+
+                        if (aircraftType && aircraftType.toLowerCase().includes(aircraftFilterText.toLowerCase())) {
+                            // Show cells that match the aircraft filter with full opacity
+                            $cell.css('opacity', '1');
+                        } else {
+                            // Make non-matching cells very transparent
+                            $cell.css('opacity', '0.1');
+                        }
+                    });
+                } else {
+                    // If no aircraft filter, show all flight cells with full opacity
+                    $row.find('.flight-assignment-cell').css('opacity', '1');
+                }
+            } else {
+                // Hide the entire row if gate filter doesn't match
+                $row.hide();
             }
         });
     }
@@ -574,6 +680,9 @@ $(document).ready(function() {
 
                     // Re-bind event handlers for the new table
                     initializeTableEventHandlers();
+
+                    // Re-apply current filters if any are selected
+                    applyFilters();
                 }
             },
             error: function(xhr, status, error) {

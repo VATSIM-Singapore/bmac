@@ -13,14 +13,26 @@
     <!-- Filters -->
     <div class="card mb-3 gate-filter-card">
         <div class="card-body">
-            <div class="row align-items-center">
+            <div class="row align-items-start">
                 <div class="col-md-3">
                     <label for="gateFilter" class="form-label mb-0">
                         <i class="fa fa-filter mr-1"></i>Filter by Gate:
                     </label>
+                    <small class="text-muted d-block mt-1">
+                        <i class="fa fa-info-circle mr-1"></i>
+                        Type gate name and press Enter to add filter. Use partial names (e.g., "A" matches A1, A2, etc.)
+                    </small>
                 </div>
                 <div class="col-md-3">
-                    <input type="text" id="gateFilter" class="form-control" placeholder="Enter gate name (e.g., A, C1, etc.)">
+                    <div class="gate-filter-wrapper">
+                        <input type="text" id="gateFilter" class="form-control" placeholder="Enter gate name (e.g., A, C1, etc.)" autocomplete="off">
+                        <div class="gate-filter-chips-container">
+                            <div class="gate-filter-chips" id="gateFilterChips"></div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary clear-all-chips" id="clearAllChips" style="display: none;">
+                                <i class="fa fa-times mr-1"></i>Clear All
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 <div class="col-md-3">
                     <label for="aircraftFilter" class="form-label mb-0">
@@ -381,6 +393,65 @@
         min-height: 100%;
         align-items: center;
     }
+
+    /* Gate filter chips styling */
+    .gate-filter-wrapper {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .gate-filter-chips-container {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        min-height: 32px;
+        padding: 4px 0;
+    }
+
+    .gate-filter-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+
+    .gate-filter-chip {
+        display: inline-flex;
+        align-items: center;
+        background-color: #007bff;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        margin: 1px;
+    }
+
+    .gate-filter-chip .remove-chip {
+        margin-left: 6px;
+        cursor: pointer;
+        font-weight: bold;
+        opacity: 0.8;
+        transition: opacity 0.2s;
+    }
+
+    .gate-filter-chip .remove-chip:hover {
+        opacity: 1;
+    }
+
+    .clear-all-chips {
+        padding: 2px 8px;
+        font-size: 0.7rem;
+        border-radius: 3px;
+        margin-left: auto;
+    }
+
+    .clear-all-chips:hover {
+        background-color: #dc3545;
+        border-color: #dc3545;
+        color: white;
+    }
 </style>
 @endpush
 
@@ -420,13 +491,81 @@ $(document).ready(function() {
     }
 
     function initializeGateFilter() {
-        $('#gateFilter').on('input', function() {
-            applyFilters();
+        let gateFilters = [];
+
+        $('#gateFilter').on('keypress', function(e) {
+            if (e.which === 13 || e.keyCode === 13) { // Enter key
+                e.preventDefault();
+                addGateFilter();
+            }
+        });
+
+        $('#gateFilter').on('blur', function() {
+            if ($(this).val().trim()) {
+                addGateFilter();
+            }
         });
 
         $('#aircraftFilter').on('input', function() {
             applyFilters();
         });
+
+        function addGateFilter() {
+            const gateName = $('#gateFilter').val().trim();
+            if (gateName && !gateFilters.includes(gateName)) {
+                gateFilters.push(gateName);
+                renderGateChips();
+                $('#gateFilter').val('');
+                applyFilters();
+            }
+        }
+
+        function removeGateFilter(gateName) {
+            gateFilters = gateFilters.filter(filter => filter !== gateName);
+            renderGateChips();
+            applyFilters();
+        }
+
+        function renderGateChips() {
+            const $chipsContainer = $('#gateFilterChips');
+            const $clearAllBtn = $('#clearAllChips');
+            $chipsContainer.empty();
+
+            gateFilters.forEach(gateName => {
+                const chip = $(`
+                    <span class="gate-filter-chip">
+                        ${gateName}
+                        <span class="remove-chip" data-gate="${gateName}">&times;</span>
+                    </span>
+                `);
+                $chipsContainer.append(chip);
+            });
+
+            // Show/hide Clear All button based on whether there are chips
+            if (gateFilters.length > 0) {
+                $clearAllBtn.show();
+            } else {
+                $clearAllBtn.hide();
+            }
+
+            // Bind remove events
+            $('.remove-chip').on('click', function() {
+                const gateName = $(this).data('gate');
+                removeGateFilter(gateName);
+            });
+        }
+
+        // Clear All button handler
+        $('#clearAllChips').on('click', function() {
+            gateFilters = [];
+            renderGateChips();
+            applyFilters();
+        });
+
+        // Make functions available globally for applyFilters
+        window.getGateFilters = function() {
+            return gateFilters;
+        };
     }
 
     function initializeTooltips() {
@@ -439,7 +578,7 @@ $(document).ready(function() {
     }
 
     function applyFilters() {
-        const gateFilterText = $('#gateFilter').val().trim();
+        const gateFilters = window.getGateFilters ? window.getGateFilters() : [];
         const aircraftFilterText = $('#aircraftFilter').val().trim();
 
         const $tableRows = $('.gate-table tbody tr');
@@ -449,10 +588,14 @@ $(document).ready(function() {
             const gateName = $row.data('gate');
             let showRow = true;
 
-            // Apply gate filter - this controls row visibility
-            if (gateFilterText) {
-                if (!gateName || typeof gateName !== 'string' || !gateName.toLowerCase().startsWith(gateFilterText.toLowerCase())) {
-                    showRow = false;
+            // Apply gate filters - this controls row visibility
+            if (gateFilters.length > 0) {
+                showRow = false;
+                for (let filter of gateFilters) {
+                    if (gateName && typeof gateName === 'string' && gateName.toLowerCase().startsWith(filter.toLowerCase())) {
+                        showRow = true;
+                        break;
+                    }
                 }
             }
 

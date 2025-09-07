@@ -85,7 +85,15 @@
                                     @if($subRow === 0)
                                         <td class="bg-dark text-white font-weight-bold sticky-gate-cell"
                                             rowspan="{{ $maxOverlaps }}">
-                                            {{ $bay->name }}
+                                            <div class="d-flex align-items-center">
+                                                <span>{{ $bay->name }}</span>
+                                                @if($maxOverlaps > 1)
+                                                    <i class="fa fa-exclamation-triangle text-warning ml-2 gate-overlap-warning"
+                                                       data-toggle="tooltip"
+                                                       data-placement="right"
+                                                       title="Gate has {{ $maxOverlaps }} overlapping assignments. Multiple flights are scheduled at the same time."></i>
+                                                @endif
+                                            </div>
                                         </td>
                                     @endif
 
@@ -357,7 +365,22 @@
         color: #495057;
     }
 
-    /* Clean up since we're using real table rows now */
+    /* Gate overlap warning icon styling */
+    .gate-overlap-warning {
+        font-size: 0.9rem;
+        cursor: help;
+        transition: transform 0.2s ease;
+    }
+
+    .gate-overlap-warning:hover {
+        transform: scale(1.1);
+    }
+
+    /* Ensure proper spacing in gate cell */
+    .sticky-gate-cell .d-flex {
+        min-height: 100%;
+        align-items: center;
+    }
 </style>
 @endpush
 
@@ -369,6 +392,9 @@ $(document).ready(function() {
 
     // Initialize gate filter
     initializeGateFilter();
+
+    // Initialize tooltips for gate overlap warnings
+    initializeTooltips();
 
     // Handle save button click
     $('#saveFlightDetails').on('click', function() {
@@ -400,6 +426,15 @@ $(document).ready(function() {
 
         $('#aircraftFilter').on('input', function() {
             applyFilters();
+        });
+    }
+
+    function initializeTooltips() {
+        // Initialize Bootstrap tooltips for gate overlap warnings
+        $('[data-toggle="tooltip"]').tooltip({
+            trigger: 'hover',
+            placement: 'right',
+            container: 'body'
         });
     }
 
@@ -680,6 +715,9 @@ $(document).ready(function() {
 
                     // Re-bind event handlers for the new table
                     initializeTableEventHandlers();
+
+                    // Re-initialize tooltips for the new table
+                    initializeTooltips();
 
                     // Re-apply current filters if any are selected
                     applyFilters();

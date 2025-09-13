@@ -98,6 +98,14 @@ Route::group(['as' => 'admin.', 'prefix' => 'admin', 'middleware' => 'auth.isAdm
         ->name('events.bay-management.flight-details');
     Route::post('{event}/bay-management/flight-details/{flight}', [App\Http\Controllers\Event\BayManagementController::class, 'updateFlightDetails'])
         ->name('events.bay-management.update-flight-details');
+
+    // Bay Blocking Routes
+    Route::get('{event}/bay-management/blocked-bays', [App\Http\Controllers\Event\BayManagementController::class, 'getBlockedBays'])
+        ->name('events.bay-management.blocked-bays');
+    Route::post('{event}/bay-management/block-bay', [App\Http\Controllers\Event\BayManagementController::class, 'blockBay'])
+        ->name('events.bay-management.block-bay');
+    Route::delete('{event}/bay-management/unblock-bay', [App\Http\Controllers\Event\BayManagementController::class, 'unblockBay'])
+        ->name('events.bay-management.unblock-bay');
 });
 
 Route::resource('bookings', BookingController::class)->only(['show', 'edit', 'update']);

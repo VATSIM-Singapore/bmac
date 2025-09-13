@@ -4,8 +4,11 @@
 <div class="container-fluid">
     <div class="row">
         <div class="col-12">
-            <div class="mb-3">
+            <div class="mb-3 d-flex justify-content-between align-items-center">
                 <h3><i class="fa fa-building mr-2"></i>Bay Assignment Management - {{ $event->name }}</h3>
+                <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#bayBlockingModal">
+                    <i class="fa fa-ban mr-2"></i>Bay Blocking
+                </button>
             </div>
         </div>
     </div>
@@ -93,12 +96,18 @@
 
                             {{-- Create sub-rows for this bay --}}
                             @for($subRow = 0; $subRow < $maxOverlaps; $subRow++)
-                                <tr class="{{ $subRow > 0 ? 'bay-sub-row' : 'bay-main-row' }}" data-gate="{{ $bay->name }}">
+                                <tr class="{{ $subRow > 0 ? 'bay-sub-row' : 'bay-main-row' }} {{ in_array($bay->id, $blockedBayIds) ? 'bay-blocked-row' : '' }}" data-gate="{{ $bay->name }}">
                                     @if($subRow === 0)
-                                        <td class="bg-dark text-white font-weight-bold sticky-gate-cell"
+                                        <td class="bg-dark text-white font-weight-bold sticky-gate-cell {{ in_array($bay->id, $blockedBayIds) ? 'bay-blocked' : '' }}"
                                             rowspan="{{ $maxOverlaps }}">
                                             <div class="d-flex align-items-center">
                                                 <span>{{ $bay->name }}</span>
+                                                @if(in_array($bay->id, $blockedBayIds))
+                                                    <i class="fa fa-ban text-white ml-2 bay-blocked-icon"
+                                                       data-toggle="tooltip"
+                                                       data-placement="right"
+                                                       title="This bay is blocked."></i>
+                                                @endif
                                                 @if($maxOverlaps > 1)
                                                     <i class="fa fa-exclamation-triangle text-warning ml-2 gate-overlap-warning"
                                                        data-toggle="tooltip"
@@ -199,6 +208,60 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" id="closeModalBtn">Close</button>
                 <button type="button" class="btn btn-primary" id="saveFlightDetails" style="display: none;">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bay Blocking Modal -->
+<div class="modal fade" id="bayBlockingModal" tabindex="-1" role="dialog" aria-labelledby="bayBlockingModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="bayBlockingModalLabel">
+                    <i class="fa fa-ban mr-2"></i>Bay Blocking Management
+                </h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><i class="fa fa-plus mr-2"></i>Add Bay Blocking</h6>
+                        <form id="addBayBlockingForm">
+                            @csrf
+                            <div class="form-group">
+                                <label for="baySelect">Select Bay to Block:</label>
+                                <select class="form-control" id="baySelect" name="bay_id" required>
+                                    <option value="">Choose a bay...</option>
+                                    @foreach($bays as $bay)
+                                        @if(!in_array($bay->id, $blockedBayIds))
+                                            <option value="{{ $bay->id }}">{{ $bay->name }}</option>
+                                        @endif
+                                    @endforeach
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-warning btn-sm">
+                                <i class="fa fa-ban mr-1"></i>Block Bay
+                            </button>
+                        </form>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="fa fa-list mr-2"></i>Currently Blocked Bays</h6>
+                        <div id="blockedBaysList">
+                            <div class="text-center text-muted">
+                                <div class="spinner-border spinner-border-sm" role="status">
+                                    <span class="sr-only">Loading...</span>
+                                </div>
+                                <div class="mt-2">Loading blocked bays...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
@@ -452,6 +515,30 @@
         border-color: #dc3545;
         color: white;
     }
+
+    /* Bay blocking styling */
+    .bay-blocked {
+        background-color: #dc3545 !important;
+    }
+
+    .bay-blocked-row {
+        background-color: #f8d7da;
+    }
+
+    .bay-blocked-row td {
+        background-color: #f8d7da;
+    }
+
+    .bay-blocked-row .flight-assignment-cell {
+        position: relative;
+        z-index: 10;
+    }
+
+    .bay-blocked-icon {
+        font-size: 0.9rem;
+        cursor: help;
+        transition: transform 0.2s ease;
+    }
 </style>
 @endpush
 
@@ -466,6 +553,9 @@ $(document).ready(function() {
 
     // Initialize tooltips for gate overlap warnings
     initializeTooltips();
+
+    // Initialize bay blocking functionality
+    initializeBayBlocking();
 
     // Handle save button click
     $('#saveFlightDetails').on('click', function() {
@@ -873,6 +963,203 @@ $(document).ready(function() {
             complete: function() {
                 // Remove loading indicator
                 $('#tableLoadingIndicator').remove();
+            }
+        });
+    }
+
+    function initializeBayBlocking() {
+        // Load blocked bays when modal is shown
+        $('#bayBlockingModal').on('show.bs.modal', function() {
+            loadBlockedBays();
+        });
+
+        // Refresh bay matrix when modal is closed
+        $('#bayBlockingModal').on('hidden.bs.modal', function() {
+            reloadBayMatrix();
+        });
+
+        // Handle modal close to prevent aria-hidden warning
+        $('#bayBlockingModal').on('hide.bs.modal', function() {
+            // Remove focus from any focused elements in the modal
+            $(this).find(':focus').blur();
+        });
+
+        // Handle add bay blocking form submission
+        $('#addBayBlockingForm').on('submit', function(e) {
+            e.preventDefault();
+            addBayBlocking();
+        });
+    }
+
+    function loadBlockedBays() {
+        $.ajax({
+            url: '{{ route("admin.events.bay-management.blocked-bays", $event) }}',
+            method: 'GET',
+            success: function(response) {
+                const $list = $('#blockedBaysList');
+                $list.empty();
+
+                if (response.blockedBays && response.blockedBays.length > 0) {
+                    response.blockedBays.forEach(function(blocking) {
+                        const bayItem = $(`
+                            <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
+                                <div>
+                                    <i class="fa fa-ban text-warning mr-2"></i>
+                                    <strong>${blocking.bay.name}</strong>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-danger remove-blocking"
+                                        data-blocking-id="${blocking.id}" data-bay-name="${blocking.bay.name}">
+                                    <i class="fa fa-times"></i>
+                                </button>
+                            </div>
+                        `);
+                        $list.append(bayItem);
+                    });
+                } else {
+                    $list.html('<div class="text-center text-muted"><i class="fa fa-check-circle mr-2"></i>No bays are currently blocked</div>');
+                }
+
+                // Bind remove events
+                $('.remove-blocking').on('click', function() {
+                    const blockingId = $(this).data('blocking-id');
+                    const bayName = $(this).data('bay-name');
+                    removeBayBlocking(blockingId, bayName);
+                });
+            },
+            error: function(xhr, status, error) {
+                $('#blockedBaysList').html('<div class="alert alert-danger"><i class="fa fa-exclamation-triangle mr-2"></i>Error loading blocked bays</div>');
+                console.error('Error loading blocked bays:', error);
+            }
+        });
+    }
+
+    function addBayBlocking() {
+        const bayId = $('#baySelect').val();
+        if (!bayId) {
+            showBayBlockingMessage('danger', 'Please select a bay to block.');
+            return;
+        }
+
+        const $submitBtn = $('#addBayBlockingForm button[type="submit"]');
+        $submitBtn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin mr-1"></i>Blocking...');
+
+        $.ajax({
+            url: '{{ route("admin.events.bay-management.block-bay", $event) }}',
+            method: 'POST',
+            data: {
+                bay_id: bayId,
+                _token: $('meta[name="csrf-token"]').attr('content')
+            },
+            success: function(response) {
+                if (response.success) {
+                    showBayBlockingMessage('success', response.message);
+                    $('#baySelect').val('');
+                    loadBlockedBays();
+                    updateBaySelectionDropdown();
+                } else {
+                    showBayBlockingMessage('danger', response.message || 'Error blocking bay.');
+                }
+            },
+            error: function(xhr, status, error) {
+                const errorMsg = xhr.responseJSON?.message || 'Error blocking bay. Please try again.';
+                showBayBlockingMessage('danger', errorMsg);
+                console.error('Error blocking bay:', error);
+            },
+            complete: function() {
+                $submitBtn.prop('disabled', false).html('<i class="fa fa-ban mr-1"></i>Block Bay');
+            }
+        });
+    }
+
+    function removeBayBlocking(blockingId, bayName) {
+        if (!confirm(`Are you sure you want to unblock bay ${bayName}?`)) {
+            return;
+        }
+
+        $.ajax({
+            url: '{{ route("admin.events.bay-management.unblock-bay", $event) }}',
+            method: 'DELETE',
+            data: {
+                blocking_id: blockingId,
+                _token: $('meta[name="csrf-token"]').attr('content')
+            },
+            success: function(response) {
+                if (response.success) {
+                    showBayBlockingMessage('success', response.message);
+                    loadBlockedBays();
+                    updateBaySelectionDropdown();
+                } else {
+                    showBayBlockingMessage('danger', response.message || 'Error unblocking bay.');
+                }
+            },
+            error: function(xhr, status, error) {
+                const errorMsg = xhr.responseJSON?.message || 'Error unblocking bay. Please try again.';
+                showBayBlockingMessage('danger', errorMsg);
+                console.error('Error unblocking bay:', error);
+            }
+        });
+    }
+
+    function showBayBlockingMessage(type, message) {
+        // Remove any existing messages
+        $('.bay-blocking-message').remove();
+
+        // Create message element
+        const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+        const iconClass = type === 'success' ? 'fa-check' : 'fa-exclamation-triangle';
+
+        const messageHtml = `
+            <div class="alert ${alertClass} alert-dismissible bay-blocking-message" role="alert">
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+                <i class="fa ${iconClass} mr-2"></i>${message}
+            </div>
+        `;
+
+        // Insert message at the top of the modal body
+        $('#bayBlockingModal .modal-body').prepend(messageHtml);
+
+        // Auto-dismiss success messages after 3 seconds
+        if (type === 'success') {
+            setTimeout(function() {
+                $('.bay-blocking-message').fadeOut(function() {
+                    $(this).remove();
+                });
+            }, 3000);
+        }
+    }
+
+    function updateBaySelectionDropdown() {
+        // Reload the blocked bays to get updated list
+        $.ajax({
+            url: '{{ route("admin.events.bay-management.blocked-bays", $event) }}',
+            method: 'GET',
+            success: function(response) {
+                const $select = $('#baySelect');
+                const currentValue = $select.val();
+
+                // Get all available bays (from the original data)
+                const allBays = @json($bays);
+                const blockedBayIds = response.blockedBays.map(blocking => blocking.bay.id);
+
+                // Clear current options except the first one
+                $select.find('option:not(:first)').remove();
+
+                // Add available bays (not blocked)
+                allBays.forEach(function(bay) {
+                    if (!blockedBayIds.includes(bay.id)) {
+                        $select.append(`<option value="${bay.id}">${bay.name}</option>`);
+                    }
+                });
+
+                // Restore previous selection if it's still valid
+                if (currentValue && !blockedBayIds.includes(parseInt(currentValue))) {
+                    $select.val(currentValue);
+                }
+            },
+            error: function() {
+                console.error('Error updating bay selection dropdown');
             }
         });
     }

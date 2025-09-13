@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Event;
 use App\Models\Bay;
 use App\Models\Flight;
+use App\Models\BayBlocking;
 use App\Enums\EventType;
 use App\Services\CachedDataService;
 use Carbon\Carbon;
@@ -28,6 +29,9 @@ class BayManagementController extends Controller
         // Get all bays for the event airport
         $cachedDataService = new CachedDataService();
         $bays = $cachedDataService->getSortedBays($event->dep);
+
+        // Get blocked bays for this event
+        $blockedBayIds = BayBlocking::where('event_id', $event->id)->pluck('bay_id')->toArray();
 
         // Get all flights for this event that have bay assignments
         $flights = Flight::whereHas('booking', function ($query) use ($event) {
@@ -53,7 +57,8 @@ class BayManagementController extends Controller
             'bays',
             'timeSlots',
             'bayUsage',
-            'timeRange'
+            'timeRange',
+            'blockedBayIds'
         ));
     }
 
@@ -587,5 +592,121 @@ class BayManagementController extends Controller
         }
 
         return $organizedData;
+    }
+
+    /**
+     * Get blocked bays for the event
+     */
+    public function getBlockedBays(Event $event): JsonResponse
+    {
+        // Ensure this is a Real Flight Ops event
+        if ($event->event_type_id !== EventType::REALFLIGHTOPS->value) {
+            return response()->json(['error' => 'Bay management is only available for Real Flight Ops events.'], 403);
+        }
+
+        $blockedBays = BayBlocking::where('event_id', $event->id)
+            ->with('bay')
+            ->get();
+
+        return response()->json(['blockedBays' => $blockedBays]);
+    }
+
+    /**
+     * Block a bay for the event
+     */
+    public function blockBay(Event $event, Request $request): JsonResponse
+    {
+        // Ensure this is a Real Flight Ops event
+        if ($event->event_type_id !== EventType::REALFLIGHTOPS->value) {
+            return response()->json(['error' => 'Bay management is only available for Real Flight Ops events.'], 403);
+        }
+
+        $request->validate([
+            'bay_id' => 'required|exists:bays,id'
+        ]);
+
+        $bayId = $request->get('bay_id');
+
+        // Check if bay is already blocked for this event
+        $existingBlocking = BayBlocking::where('event_id', $event->id)
+            ->where('bay_id', $bayId)
+            ->first();
+
+        if ($existingBlocking) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This bay is already blocked for this event.'
+            ]);
+        }
+
+        // Verify the bay belongs to the event's airport
+        $bay = Bay::find($bayId);
+        if (!$bay || (int)$bay->airport_id !== (int)$event->dep) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid bay for this event.'
+            ]);
+        }
+
+        try {
+            BayBlocking::create([
+                'event_id' => $event->id,
+                'bay_id' => $bayId
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => "Bay {$bay->name} has been blocked successfully."
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error blocking bay: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Unblock a bay for the event
+     */
+    public function unblockBay(Event $event, Request $request): JsonResponse
+    {
+        // Ensure this is a Real Flight Ops event
+        if ($event->event_type_id !== EventType::REALFLIGHTOPS->value) {
+            return response()->json(['error' => 'Bay management is only available for Real Flight Ops events.'], 403);
+        }
+
+        $request->validate([
+            'blocking_id' => 'required|exists:bay_blockings,id'
+        ]);
+
+        $blockingId = $request->get('blocking_id');
+
+        try {
+            $blocking = BayBlocking::where('id', $blockingId)
+                ->where('event_id', $event->id)
+                ->with('bay')
+                ->first();
+
+            if (!$blocking) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Bay blocking not found.'
+                ]);
+            }
+
+            $bayName = $blocking->bay->name;
+            $blocking->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => "Bay {$bayName} has been unblocked successfully."
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error unblocking bay: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }

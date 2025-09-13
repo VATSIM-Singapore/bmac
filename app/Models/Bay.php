@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
 use App\Services\CachedDataService;
@@ -44,6 +45,11 @@ class Bay extends Model
     public function airport(): BelongsTo
     {
         return $this->belongsTo(Airport::class);
+    }
+
+    public function bayBlockings(): HasMany
+    {
+        return $this->hasMany(BayBlocking::class);
     }
 
     /**

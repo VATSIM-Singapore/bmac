@@ -141,6 +141,11 @@ class Event extends Model
         return $this->belongsToMany(Faq::class);
     }
 
+    public function bayBlockings(): HasMany
+    {
+        return $this->hasMany(BayBlocking::class);
+    }
+
     public function sluggable(): array
     {
         return [

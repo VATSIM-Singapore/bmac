@@ -68,10 +68,12 @@
                     <label for="dep_bay" class="font-weight-bold">Assigned Gate:</label>
                     <select name="dep_bay" id="dep_bay" class="form-control">
                         <option value="">-- Select Gate --</option>
-                        @foreach($bays as $bay)
-                            <option value="{{ $bay->id }}" {{ $flight->dep_bay == $bay->id ? 'selected' : '' }}>
-                                {{ $bay->name }}
-                            </option>
+                        @foreach($bays as $bayId => $bayName)
+                            @if($bayId !== '')
+                                <option value="{{ $bayId }}" {{ $flight->dep_bay == $bayId ? 'selected' : '' }}>
+                                    {{ $bayName }}
+                                </option>
+                            @endif
                         @endforeach
                     </select>
                 </div>
@@ -104,10 +106,12 @@
                     <label for="arr_bay" class="font-weight-bold">Assigned Gate:</label>
                     <select name="arr_bay" id="arr_bay" class="form-control">
                         <option value="">-- Select Gate --</option>
-                        @foreach($bays as $bay)
-                            <option value="{{ $bay->id }}" {{ $flight->arr_bay == $bay->id ? 'selected' : '' }}>
-                                {{ $bay->name }}
-                            </option>
+                        @foreach($bays as $bayId => $bayName)
+                            @if($bayId !== '')
+                                <option value="{{ $bayId }}" {{ $flight->arr_bay == $bayId ? 'selected' : '' }}>
+                                    {{ $bayName }}
+                                </option>
+                            @endif
                         @endforeach
                     </select>
                 </div>

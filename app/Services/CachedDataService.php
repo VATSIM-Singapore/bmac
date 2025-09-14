@@ -65,17 +65,34 @@ class CachedDataService
      * Cached for 6 hours (21600 seconds) per airport
      *
      * @param int $airportId
+     * @param int|null $eventId
      * @return Collection
      */
-    public function getBaysForSelect(int $airportId): Collection
+    public function getBaysForSelect(int $airportId, ?int $eventId = null): Collection
     {
+        $cacheKey = "bays_for_select_airport_{$airportId}" . ($eventId ? "_event_{$eventId}" : '');
+
         try {
-            return Cache::remember("bays_for_select_airport_{$airportId}", 21600, function () use ($airportId) {
+            return Cache::remember($cacheKey, 21600, function () use ($airportId, $eventId) {
                 $sortedBays = Bay::getSortedBaysForAirport($airportId);
+
+                // Get all blocked bay IDs for this event in a single query
+                $blockedBayIds = collect();
+                if ($eventId) {
+                    $blockedBayIds = \App\Models\BayBlocking::where('event_id', $eventId)
+                        ->pluck('bay_id');
+                }
 
                 $bays = collect(['' => '-- No Bay --']);
                 foreach ($sortedBays as $bay) {
-                    $bays->put((string) $bay->id, $bay->name);
+                    $bayName = $bay->name;
+
+                    // Check if bay is blocked using the pre-fetched collection
+                    if ($blockedBayIds->contains($bay->id)) {
+                        $bayName = $bay->name . ' (Blocked)';
+                    }
+
+                    $bays->put((string) $bay->id, $bayName);
                 }
 
                 return $bays;
@@ -84,9 +101,23 @@ class CachedDataService
             // Fallback to database if cache fails
             $sortedBays = Bay::getSortedBaysForAirport($airportId);
 
+            // Get all blocked bay IDs for this event
+            $blockedBayIds = collect();
+            if ($eventId) {
+                $blockedBayIds = \App\Models\BayBlocking::where('event_id', $eventId)
+                    ->pluck('bay_id');
+            }
+
             $bays = collect(['' => '-- No Bay --']);
             foreach ($sortedBays as $bay) {
-                $bays->put((string) $bay->id, $bay->name);
+                $bayName = $bay->name;
+
+                // Check if bay is blocked using the pre-fetched collection
+                if ($blockedBayIds->contains($bay->id)) {
+                    $bayName = $bay->name . ' (Blocked)';
+                }
+
+                $bays->put((string) $bay->id, $bayName);
             }
 
             return $bays;
@@ -116,11 +147,16 @@ class CachedDataService
      * Clear bays cache for a specific airport
      *
      * @param int $airportId
+     * @param int|null $eventId
      */
-    public function clearBaysCache(int $airportId): void
+    public function clearBaysCache(int $airportId, ?int $eventId = null): void
     {
         Cache::forget("bays_for_select_airport_{$airportId}");
         Cache::forget("sorted_bays_airport_{$airportId}");
+
+        if ($eventId) {
+            Cache::forget("bays_for_select_airport_{$airportId}_event_{$eventId}");
+        }
     }
 
     /**

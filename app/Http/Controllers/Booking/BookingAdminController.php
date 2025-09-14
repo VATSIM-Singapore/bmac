@@ -156,10 +156,10 @@ class BookingAdminController extends AdminController
             $arrBays = [];
             if ($booking->event->event_type_id == \App\Enums\EventType::REALFLIGHTOPS->value) {
                 if ($flight->dep) {
-                    $depBays = $cachedDataService->getBaysForSelect($flight->dep)->toArray();
+                    $depBays = $cachedDataService->getBaysForSelect($flight->dep, $booking->event->id)->toArray();
                 }
                 if ($flight->arr) {
-                    $arrBays = $cachedDataService->getBaysForSelect($flight->arr)->toArray();
+                    $arrBays = $cachedDataService->getBaysForSelect($flight->arr, $booking->event->id)->toArray();
                 }
             }
 

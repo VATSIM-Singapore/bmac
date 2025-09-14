@@ -107,7 +107,11 @@
                         return;
                     }
 
-                    fetch(`/api/bays/by-airport?airport_id=${airportId}`)
+                    // Get event ID from the booking data
+                    const eventId = '{{ $booking->event->id }}';
+                    const url = `/api/bays/by-airport?airport_id=${airportId}${eventId ? `&event_id=${eventId}` : ''}`;
+
+                    fetch(url)
                         .then(response => response.json())
                         .then(bays => {
                             // Start with "No Bay" option

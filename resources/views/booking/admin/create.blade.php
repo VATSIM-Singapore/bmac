@@ -125,7 +125,11 @@
                         return;
                     }
 
-                    fetch(`/api/bays/by-airport?airport_id=${airportId}`)
+                    // Get event ID from the hidden input
+                    const eventId = document.querySelector('input[name="id"]').value;
+                    const url = `/api/bays/by-airport?airport_id=${airportId}${eventId ? `&event_id=${eventId}` : ''}`;
+
+                    fetch(url)
                         .then(response => response.json())
                         .then(bays => {
                             baySelect.innerHTML = '<option value="">-- No Bay --</option>';

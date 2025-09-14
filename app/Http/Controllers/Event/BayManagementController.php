@@ -314,9 +314,9 @@ class BayManagementController extends Controller
         // Load relationships
         $flight->load(['booking.user', 'airportDep', 'airportArr', 'depBay', 'arrBay']);
 
-        // Get available bays for the airport
+        // Get available bays for the airport with blocked status
         $cachedDataService = new CachedDataService();
-        $bays = $cachedDataService->getSortedBays($event->dep);
+        $bays = $cachedDataService->getBaysForSelect($event->dep, $event->id);
 
         // Generate the modal content HTML
         $html = view('event.bay-management.flight-details-modal', compact(

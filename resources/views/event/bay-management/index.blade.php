@@ -306,7 +306,7 @@
 
     /* Sub-rows (without bay name cell) need lower z-index to stay behind sticky column */
     .bay-sub-row td {
-        z-index: 1;
+        z-index: 1 !important;
         position: relative;
     }
 

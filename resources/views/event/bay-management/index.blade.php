@@ -553,6 +553,12 @@
         cursor: help;
         transition: transform 0.2s ease;
     }
+
+    /* Visual feedback for scroll position restoration */
+    .position-restored {
+        box-shadow: 0 0 10px rgba(0, 123, 255, 0.3);
+        transition: box-shadow 0.3s ease;
+    }
 </style>
 @endpush
 
@@ -940,8 +946,16 @@ $(document).ready(function() {
     }
 
     function reloadBayMatrix() {
+        // Capture current scroll position before refresh
+        const $tableContainer = $('.table-container');
+        const scrollTop = $tableContainer.scrollTop();
+        const scrollLeft = $tableContainer.scrollLeft();
+        
+        // Store the position for visual feedback
+        window.lastScrollPosition = { top: scrollTop, left: scrollLeft };
+
         // Show loading indicator
-        $('.table-container').prepend(`
+        $tableContainer.prepend(`
             <div class="text-center p-3" id="tableLoadingIndicator">
                 <div class="spinner-border text-primary" role="status">
                     <span class="sr-only">Loading...</span>
@@ -961,7 +975,7 @@ $(document).ready(function() {
 
                 if ($newTable.length > 0) {
                     // Replace the table container
-                    $('.table-container').replaceWith($newTable);
+                    $tableContainer.replaceWith($newTable);
 
                     // Re-bind event handlers for the new table
                     initializeTableEventHandlers();
@@ -974,6 +988,30 @@ $(document).ready(function() {
 
                     // Refresh warning data after table update
                     generateWarningBannerFromMatrix();
+
+                    // Restore scroll position after a brief delay to ensure DOM is ready
+                    setTimeout(function() {
+                        const $newTableContainer = $('.table-container');
+                        
+                        // Ensure the scroll position doesn't exceed the new content dimensions
+                        const maxScrollTop = $newTableContainer[0].scrollHeight - $newTableContainer[0].clientHeight;
+                        const maxScrollLeft = $newTableContainer[0].scrollWidth - $newTableContainer[0].clientWidth;
+                        
+                        const adjustedScrollTop = Math.min(scrollTop, maxScrollTop);
+                        const adjustedScrollLeft = Math.min(scrollLeft, maxScrollLeft);
+                        
+                        $newTableContainer.scrollTop(adjustedScrollTop);
+                        $newTableContainer.scrollLeft(adjustedScrollLeft);
+                        
+                        // Add subtle visual feedback that position was restored
+                        if (window.lastScrollPosition && 
+                            (window.lastScrollPosition.top > 0 || window.lastScrollPosition.left > 0)) {
+                            $newTableContainer.addClass('position-restored');
+                            setTimeout(function() {
+                                $newTableContainer.removeClass('position-restored');
+                            }, 1000);
+                        }
+                    }, 50);
                 }
             },
             error: function(xhr, status, error) {

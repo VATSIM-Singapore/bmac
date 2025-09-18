@@ -13,6 +13,20 @@
         </div>
     </div>
 
+    <!-- Warning Banner -->
+    <div id="warningBanner" class="alert alert-warning alert-dismissible fade show" role="alert" style="display: none;">
+        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+        </button>
+        <div class="d-flex align-items-start">
+            <div class="flex-grow-1">
+                <div id="warningContent">
+                    <!-- Warning content will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Filters -->
     <div class="card mb-3 gate-filter-card">
         <div class="card-body">
@@ -557,6 +571,9 @@ $(document).ready(function() {
     // Initialize bay blocking functionality
     initializeBayBlocking();
 
+    // Initialize warning banner
+    initializeWarningBanner();
+
     // Handle save button click
     $('#saveFlightDetails').on('click', function() {
         saveFlightDetails();
@@ -954,6 +971,9 @@ $(document).ready(function() {
 
                     // Re-apply current filters if any are selected
                     applyFilters();
+
+                    // Refresh warning data after table update
+                    generateWarningBannerFromMatrix();
                 }
             },
             error: function(xhr, status, error) {
@@ -1164,6 +1184,133 @@ $(document).ready(function() {
         });
     }
 
+    function initializeWarningBanner() {
+        // Generate warning banner from existing matrix data on page load
+        generateWarningBannerFromMatrix();
+
+        // Set up periodic refresh of warning data (every 30 seconds)
+        setInterval(generateWarningBannerFromMatrix, 30000);
+    }
+
+    function generateWarningBannerFromMatrix() {
+        const $banner = $('#warningBanner');
+        const $content = $('#warningContent');
+
+        // Scan the matrix table for warning indicators
+        const overlappingBays = [];
+        const blockedBayAssignments = [];
+
+        // Find all bay rows (main rows, not sub-rows)
+        $('.bay-main-row').each(function() {
+            const $row = $(this);
+            const gateName = $row.data('gate');
+
+            if (!gateName) return;
+
+            // Check for overlap warning icon
+            const $overlapIcon = $row.find('.gate-overlap-warning');
+            if ($overlapIcon.length > 0) {
+                // Extract overlap count from tooltip title
+                const tooltipTitle = $overlapIcon.attr('title') || '';
+                const overlapMatch = tooltipTitle.match(/(\d+) overlapping assignments/);
+                const overlapCount = overlapMatch ? parseInt(overlapMatch[1]) : 2;
+
+                overlappingBays.push({
+                    bay_name: gateName,
+                    overlap_count: overlapCount
+                });
+            }
+
+            // Check for blocked bay icon
+            const $blockedIcon = $row.find('.bay-blocked-icon');
+            if ($blockedIcon.length > 0) {
+                // Check if this bay has any flight assignments
+                const hasAssignments = $row.find('.flight-assignment-cell').length > 0;
+                if (hasAssignments) {
+                    blockedBayAssignments.push({
+                        bay_name: gateName
+                    });
+                }
+            }
+        });
+
+        // Sort the arrays to match backend behavior
+        overlappingBays.sort((a, b) => compareBayNames(a.bay_name, b.bay_name));
+        blockedBayAssignments.sort((a, b) => compareBayNames(a.bay_name, b.bay_name));
+
+        // Generate warning content
+        let warningHtml = '';
+        let hasWarnings = false;
+
+        // Add overlapping bay warnings
+        if (overlappingBays.length > 0) {
+            const overlappingBayNames = overlappingBays.map(bay => bay.bay_name).join(', ');
+            warningHtml += `
+                <div class="mb-2">
+                    <strong><i class="fa fa-exclamation-triangle mr-1"></i>Bay overlapping assignment for:</strong> ${overlappingBayNames}
+                </div>
+            `;
+            hasWarnings = true;
+        }
+
+        // Add blocked bay assignment warnings
+        if (blockedBayAssignments.length > 0) {
+            const blockedBayNames = blockedBayAssignments.map(assignment => assignment.bay_name).join(', ');
+            warningHtml += `
+                <div class="mb-2">
+                    <strong><i class="fa fa-ban mr-1"></i>Blocked bay assigned for:</strong> ${blockedBayNames}
+                </div>
+            `;
+            hasWarnings = true;
+        }
+
+        // Show or hide banner
+        if (hasWarnings) {
+            $content.html(warningHtml);
+            $banner.show();
+        } else {
+            $banner.hide();
+        }
+    }
+
+    /**
+     * Compare bay names using the same sorting logic as the backend
+     * This ensures consistent ordering between the table matrix and warning banner
+     */
+    function compareBayNames(nameA, nameB) {
+        const sortKeyA = getBaySortKey(nameA);
+        const sortKeyB = getBaySortKey(nameB);
+        return sortKeyA.localeCompare(sortKeyB);
+    }
+
+    /**
+     * Generate sort key for bay name using the same logic as the backend
+     */
+    function getBaySortKey(name) {
+        // Check if the name starts with a letter
+        if (/^[A-Z]/.test(name)) {
+            // Letter-prefixed gates: extract letter, number, and suffix for proper sorting
+            const match = name.match(/^([A-Z]+)(\d+)([A-Z]*)$/);
+            if (match) {
+                const letter = match[1];      // "A", "C", etc.
+                const number = parseInt(match[2]); // 1, 17, etc.
+                const suffix = match[3] || ''; // "L", "R", etc.
+
+                // Create sortable key: letter + padded number + suffix
+                // This ensures A1 < A2 < A10 < C1 < C17L < C17R
+                return letter + number.toString().padStart(5, '0') + suffix;
+            }
+            // If it doesn't match the pattern, put it with letter gates but sort by name
+            return '0' + name;
+        } else {
+            // Numeric-only gates: pad with zeros and prefix with 'ZZ' to put them last
+            if (/^\d+$/.test(name)) {
+                return 'ZZ' + name.padStart(5, '0');
+            }
+            // Other formats go last
+            return 'ZZ' + name;
+        }
+    }
 });
 </script>
 @endpush

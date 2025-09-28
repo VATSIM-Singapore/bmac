@@ -53,8 +53,12 @@
                 </div>
                 <div class="col-md-3">
                     <label for="aircraftFilter" class="form-label mb-0">
-                        <i class="fa fa-plane mr-1"></i>Filter by Aircraft Type:
+                        <i class="fa fa-plane mr-1"></i>Highlight Aircraft Type:
                     </label>
+                    <small class="text-muted d-block mt-1">
+                        <i class="fa fa-info-circle mr-1"></i>
+                        Dims flights that don't match the specified aircraft type
+                    </small>
                 </div>
                 <div class="col-md-3">
                     <input type="text" id="aircraftFilter" class="form-control" placeholder="Enter aircraft type (e.g., B738, A320, etc.)">
@@ -77,7 +81,9 @@
                     <small class="text-muted d-block mb-1"><i class="fa fa-info-circle mr-1"></i>Legend:</small>
                     <div>
                         <span class="badge badge-warning mr-1">Arrival</span>
-                        <span class="badge badge-info">Departure</span>
+                        <span class="badge badge-info mr-1">Departure</span>
+                        <span class="badge badge-warning adhoc-striped mr-1">Ad Hoc Arrival</span>
+                        <span class="badge badge-info adhoc-striped">Ad Hoc Departure</span>
                     </div>
                 </div>
             </div>
@@ -110,7 +116,7 @@
 
                             {{-- Create sub-rows for this bay --}}
                             @for($subRow = 0; $subRow < $maxOverlaps; $subRow++)
-                                <tr class="{{ $subRow > 0 ? 'bay-sub-row' : 'bay-main-row' }} {{ in_array($bay->id, $blockedBayIds) ? 'bay-blocked-row' : '' }}" data-gate="{{ $bay->name }}">
+                                <tr class="{{ $subRow > 0 ? 'bay-sub-row' : 'bay-main-row' }} {{ in_array($bay->id, $blockedBayIds) ? 'bay-blocked-row' : '' }}" data-gate="{{ $bay->name }}" data-bay-id="{{ $bay->id }}">
                                     @if($subRow === 0)
                                         <td class="bg-dark text-white font-weight-bold sticky-gate-cell {{ in_array($bay->id, $blockedBayIds) ? 'bay-blocked' : '' }}"
                                             rowspan="{{ $maxOverlaps }}">
@@ -153,7 +159,17 @@
 
                                         @if($assignment)
                                             @php
-                                                $cssClass = $assignment['type'] === 'departure' ? 'bg-info text-white' : 'bg-warning text-white';
+                                                $cssClass = 'bg-warning text-white'; // Default for arrival
+                                                if ($assignment['type'] === 'departure') {
+                                                    $cssClass = 'bg-info text-white';
+                                                } elseif ($assignment['type'] === 'adhoc') {
+                                                    // Use striped pattern for ad hoc flights
+                                                    if ($assignment['flight_type'] === 'departure') {
+                                                        $cssClass = 'bg-info text-white adhoc-striped';
+                                                    } else {
+                                                        $cssClass = 'bg-warning text-white adhoc-striped';
+                                                    }
+                                                }
                                                 $colspan = $assignment['colspan'] ?? 1;
 
                                                 // Only add cells to skip if colspan > 1
@@ -276,6 +292,156 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Ad Hoc Flight Modal -->
+<div class="modal fade" id="adhocFlightModal" tabindex="-1" role="dialog" aria-labelledby="adhocFlightModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="adhocFlightModalLabel">
+                    <i class="fa fa-plus mr-2"></i>Add Ad Hoc Flight
+                </h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="adhocFlightContent">
+                <!-- Choice Selection -->
+                <div id="adhocChoiceSection" class="text-center">
+                    <h6 class="mb-3">Select Flight Type:</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <button type="button" class="btn btn-info btn-lg btn-block" id="selectDeparture">
+                                <i class="fa fa-plane-departure mr-2"></i>Departure
+                            </button>
+                        </div>
+                        <div class="col-md-6">
+                            <button type="button" class="btn btn-warning btn-lg btn-block" id="selectArrival">
+                                <i class="fa fa-plane-arrival mr-2"></i>Arrival
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Flight Form -->
+                <div id="adhocFlightForm" style="display: none;">
+                    <form id="adhocFlightFormData">
+                        @csrf
+                        <input type="hidden" id="selectedTimeSlot" name="time_slot">
+                        <input type="hidden" id="flightType" name="flight_type">
+                        <input type="hidden" id="eventId" name="event_id" value="{{ $event->id }}">
+
+                        <!-- Flight Information -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h6 class="text-primary mb-3"><i class="fa fa-plane mr-2"></i>Flight Information</h6>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="callsign" class="font-weight-bold">Callsign <span class="text-danger">*</span>:</label>
+                                    <input type="text" class="form-control" id="callsign" name="callsign" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="acType" class="font-weight-bold">Aircraft Type <span class="text-danger">*</span>:</label>
+                                    <input type="text" class="form-control" id="acType" name="acType" required>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Airport Information -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h6 class="text-success mb-3"><i class="fa fa-map-marker-alt mr-2"></i>Airport Information</h6>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="dep" class="font-weight-bold">Departure Airport:</label>
+                                    <select class="form-control" id="dep" name="dep">
+                                        <option value="">-- Select Airport --</option>
+                                        @foreach(\App\Models\Airport::orderBy('name')->get() as $airport)
+                                            <option value="{{ $airport->id }}">{{ $airport->name }} ({{ $airport->icao }})</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="arr" class="font-weight-bold">Arrival Airport:</label>
+                                    <select class="form-control" id="arr" name="arr">
+                                        <option value="">-- Select Airport --</option>
+                                        @foreach(\App\Models\Airport::orderBy('name')->get() as $airport)
+                                            <option value="{{ $airport->id }}">{{ $airport->name }} ({{ $airport->icao }})</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Time Information -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h6 class="text-info mb-3"><i class="fa fa-clock mr-2"></i>Time Information</h6>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="std" class="font-weight-bold">STD (Scheduled Time of Departure):</label>
+                                    <input type="datetime-local" class="form-control" id="std" name="std">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="sta" class="font-weight-bold">STA (Scheduled Time of Arrival):</label>
+                                    <input type="datetime-local" class="form-control" id="sta" name="sta">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bay Assignment Information -->
+                        <div class="row">
+                            <div class="col-12">
+                                <h6 class="text-warning mb-3">
+                                    <i class="fa fa-building mr-2"></i>
+                                    <span id="assignmentTypeLabel">Bay Assignment</span>
+                                </h6>
+                            </div>
+                            <div class="col-md-12">
+                                <div class="form-group">
+                                    <label class="font-weight-bold">Assigned Gate:</label>
+                                    <select class="form-control" id="assignedGate" name="bay_id">
+                                        <option value="">-- Select Gate --</option>
+                                        @foreach($bays as $bay)
+                                            <option value="{{ $bay->id }}">{{ $bay->name }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="font-weight-bold">Booked From:</label>
+                                    <input type="datetime-local" class="form-control" id="bayAssignedFrom" name="bay_assigned_from">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="font-weight-bold">Booked To:</label>
+                                    <input type="datetime-local" class="form-control" id="bayAssignedTo" name="bay_assigned_to">
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveAdhocFlight" style="display: none;">
+                    <i class="fa fa-save mr-1"></i>Save Ad Hoc Flight
+                </button>
             </div>
         </div>
     </div>
@@ -559,11 +725,604 @@
         box-shadow: 0 0 10px rgba(0, 123, 255, 0.3);
         transition: box-shadow 0.3s ease;
     }
+
+    /* Diagonal striped pattern for ad hoc flights */
+    .adhoc-striped {
+        background-image: repeating-linear-gradient(
+            45deg,
+            transparent,
+            transparent 8px,
+            rgba(255, 255, 255, 0.15) 8px,
+            rgba(255, 255, 255, 0.15) 16px
+        ) !important;
+    }
+
+    /* Aircraft filter dimming effect */
+    .aircraft-filter-dimmed {
+        opacity: 0.3 !important;
+        filter: grayscale(0.8) !important;
+        transition: opacity 0.3s ease, filter 0.3s ease;
+    }
 </style>
 @endpush
 
 @push('scripts')
 <script>
+// Safe modal close function to prevent ARIA issues (global scope)
+function closeModalSafely() {
+    // Remove focus from any focused element
+    if (document.activeElement && document.activeElement.blur) {
+        document.activeElement.blur();
+    }
+    // Force focus to body
+    document.body.focus();
+    // Restore original modal footer for regular flights
+    restoreOriginalModalFooter();
+    // Close modal
+    $('#flightDetailsModal').modal('hide');
+}
+
+// Restore original modal footer for regular flights
+function restoreOriginalModalFooter() {
+    const originalFooter = `
+        <button type="button" class="btn btn-secondary" id="closeModalBtn">Close</button>
+        <button type="button" class="btn btn-primary" id="saveFlightDetails" style="display: none;">Save Changes</button>
+    `;
+    $('#flightDetailsModal .modal-footer').html(originalFooter);
+}
+
+// Delete ad hoc flight function (global scope)
+function deleteAdhocFlight(flightId) {
+    if (confirm('Are you sure you want to delete this ad hoc flight? This action cannot be undone.')) {
+        $.ajax({
+            url: '{{ route("admin.events.bay-management.delete-adhoc-flight", $event) }}',
+            method: 'DELETE',
+            data: {
+                flight_id: flightId,
+                _token: '{{ csrf_token() }}'
+            },
+            success: function(response) {
+                if (response.success) {
+                    // Show success message below breadcrumbs
+                    showMessage('success', 'Ad hoc flight deleted successfully!');
+                    // Use the proper modal close function
+                    closeModalSafely();
+                    // Reload only the table/matrix (preserves scroll position)
+                    reloadBayMatrix();
+                } else {
+                    showModalMessage('danger', response.message || 'Error deleting ad hoc flight.');
+                }
+            },
+            error: function(xhr) {
+                console.error('Error deleting ad hoc flight:', xhr);
+                showModalMessage('danger', 'Error deleting ad hoc flight. Please try again.');
+            }
+        });
+    }
+}
+
+// Show modal message function (global scope)
+function showModalMessage(type, message) {
+    // Remove any existing modal messages
+    $('.modal-message').remove();
+
+    // Create message element
+    const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+    const iconClass = type === 'success' ? 'fa-check' : 'fa-exclamation-triangle';
+
+    const messageHtml = `
+        <div class="alert ${alertClass} alert-dismissible modal-message" role="alert">
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+            <i class="fa ${iconClass} mr-2"></i>${message}
+        </div>
+    `;
+
+    // Insert message at the top of the modal body
+    // Check which modal is currently open and target the appropriate content area
+    if ($('#adhocFlightModal').hasClass('show')) {
+        $('#adhocFlightContent').prepend(messageHtml);
+    } else {
+        $('#flightDetailsContent').prepend(messageHtml);
+    }
+
+    // Auto-dismiss success messages after 5 seconds
+    if (type === 'success') {
+        setTimeout(function() {
+            $('.modal-message').fadeOut(function() {
+                $(this).remove();
+            });
+        }, 5000);
+    }
+}
+
+// Show main page message function (global scope)
+function showMessage(type, message) {
+    // Remove any existing messages
+    $('.bay-management-message').remove();
+
+    // Create message element
+    const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+    const iconClass = type === 'success' ? 'fa-check' : 'fa-exclamation-triangle';
+
+    const messageHtml = `
+        <div class="alert ${alertClass} alert-dismissible bay-management-message" role="alert">
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+            <i class="fa ${iconClass} mr-2"></i>${message}
+        </div>
+    `;
+
+    // Insert message below breadcrumbs
+    $('.container-fluid .row .col-12 .mb-3').after(messageHtml);
+
+    // Auto-dismiss success messages after 5 seconds
+    if (type === 'success') {
+        setTimeout(function() {
+            $('.bay-management-message').fadeOut(function() {
+                $(this).remove();
+            });
+        }, 5000);
+    }
+}
+
+// Initialize table event handlers function (global scope)
+function initializeTableEventHandlers() {
+    // Handle clicks on existing flight assignment cells
+    $(document).off('click', '.flight-assignment-cell').on('click', '.flight-assignment-cell', function(e) {
+        e.stopPropagation();
+
+        // Focus tracking
+        $('.flight-assignment-cell').removeClass('last-clicked');
+        $(this).addClass('last-clicked');
+
+        // Get flight data from the cell itself
+        const flightId = $(this).data('flight-id');
+        const assignmentType = $(this).data('assignment-type');
+
+        if (flightId) {
+            // Check if this is an ad hoc flight
+            if (assignmentType === 'adhoc') {
+                // For ad hoc flights, show a simple info modal instead of trying to load details
+                showAdhocFlightInfo(flightId);
+            } else {
+                loadFlightDetails(flightId, assignmentType);
+            }
+        }
+    });
+
+    // Handle clicks on empty cells for ad hoc flights
+    $(document).off('click', '.time-slot.table-light').on('click', '.time-slot.table-light', function(e) {
+        e.stopPropagation();
+
+        // Get the bay and time information from the cell
+        const $row = $(this).closest('tr');
+        const gateName = $row.data('gate');
+        const $header = $('.gate-table thead th');
+        const cellIndex = $(this).index();
+        const timeSlot = $header.eq(cellIndex).text();
+
+        // Get bay ID from the row data
+        const bayId = $row.data('bay-id') || $row.find('td:first').data('bay-id');
+
+        // Store the selected information
+        window.selectedAdhocData = {
+            gateName: gateName,
+            timeSlot: timeSlot,
+            bayId: bayId,
+            timeSlotIndex: cellIndex
+        };
+
+        // Set the time slot in the hidden field
+        $('#selectedTimeSlot').val(timeSlot);
+
+        // Show the ad hoc flight modal
+        $('#adhocFlightModal').modal('show');
+    });
+}
+
+// Initialize tooltips function (global scope)
+function initializeTooltips() {
+    // Initialize Bootstrap tooltips for gate overlap warnings
+    $('[data-toggle="tooltip"]').tooltip({
+        trigger: 'hover',
+        placement: 'right',
+        container: 'body'
+    });
+}
+
+// Apply filters function (global scope)
+function applyFilters() {
+    const gateFilters = window.getGateFilters ? window.getGateFilters() : [];
+    const aircraftFilterText = $('#aircraftFilter').val().trim();
+
+    const $tableRows = $('.gate-table tbody tr');
+    $tableRows.each(function() {
+        const $row = $(this);
+        const gateName = $row.data('gate');
+        let showRow = true;
+
+        // Apply gate filters - this controls row visibility
+        if (gateFilters.length > 0) {
+            showRow = false;
+            for (let filter of gateFilters) {
+                if (gateName && typeof gateName === 'string' && gateName.toLowerCase().startsWith(filter.toLowerCase())) {
+                    showRow = true;
+                    break;
+                }
+            }
+        }
+
+        // Show or hide the entire row based on gate filter
+        if (showRow) {
+            $row.show();
+
+            // Apply aircraft filter to flight cells within visible rows
+            if (aircraftFilterText) {
+                const $flightCells = $row.find('.flight-assignment-cell');
+                
+                $flightCells.each(function() {
+                    const $cell = $(this);
+                    const aircraftType = $cell.data('aircraft-type') || '';
+                    const matchesFilter = aircraftType.toLowerCase().includes(aircraftFilterText.toLowerCase());
+                    
+                    // Apply visual styling based on match
+                    if (matchesFilter) {
+                        $cell.removeClass('aircraft-filter-dimmed');
+                    } else {
+                        $cell.addClass('aircraft-filter-dimmed');
+                    }
+                });
+            } else {
+                // Clear aircraft filter styling when no filter is applied
+                $row.find('.flight-assignment-cell').removeClass('aircraft-filter-dimmed');
+            }
+        } else {
+            $row.hide();
+        }
+    });
+}
+
+// Generate warning banner from matrix function (global scope)
+function generateWarningBannerFromMatrix() {
+    // This function should be implemented based on existing logic
+    // For now, just a placeholder to prevent ReferenceError
+}
+
+// Show ad hoc flight info function (global scope)
+function showAdhocFlightInfo(flightId) {
+    // Show modal with loading state
+    $('#flightDetailsModal').modal('show');
+    $('#flightDetailsContent').html(`
+        <div class="text-center">
+            <div class="spinner-border" role="status">
+                <span class="sr-only">Loading...</span>
+            </div>
+            <p class="mt-2">Loading ad hoc flight details...</p>
+        </div>
+    `);
+
+    // Load ad hoc flight details for editing
+    loadAdhocFlightForEdit(flightId);
+}
+
+// Load ad hoc flight for edit function (global scope)
+function loadAdhocFlightForEdit(flightId) {
+    $.ajax({
+        url: '{{ route("admin.events.bay-management.get-adhoc-flight", $event) }}',
+        method: 'GET',
+        data: { flight_id: flightId },
+        success: function(response) {
+            if (response.success) {
+                displayAdhocFlightEditForm(response.flight);
+            } else {
+                showModalMessage('danger', response.message || 'Error loading ad hoc flight details.');
+            }
+        },
+        error: function(xhr) {
+            console.error('Error loading ad hoc flight details:', xhr);
+            showModalMessage('danger', 'Error loading ad hoc flight details. Please try again.');
+        }
+    });
+}
+
+// Display ad hoc flight edit form function (global scope)
+function displayAdhocFlightEditForm(flight) {
+    const flightType = flight.dep == '{{ $event->dep }}' ? 'departure' : 'arrival';
+    const stdValue = flight.std ? new Date(flight.std).toISOString().slice(0, 16) : '';
+    const staValue = flight.sta ? new Date(flight.sta).toISOString().slice(0, 16) : '';
+    const bayFromValue = flight.bay_assigned_from ? new Date(flight.bay_assigned_from).toISOString().slice(0, 16) : '';
+    const bayToValue = flight.bay_assigned_to ? new Date(flight.bay_assigned_to).toISOString().slice(0, 16) : '';
+
+    // Build form HTML using string concatenation to avoid template literal issues
+    let formHtml = '<form id="editAdhocFlightForm">';
+    formHtml += '<input type="hidden" id="editFlightId" value="' + flight.id + '">';
+    formHtml += '<input type="hidden" id="editFlightType" value="' + flightType + '">';
+
+    formHtml += '<div class="row mb-4">';
+    formHtml += '<div class="col-12">';
+    formHtml += '<h6 class="text-primary mb-3"><i class="fa fa-edit mr-2"></i>Edit Ad Hoc Flight</h6>';
+    formHtml += '</div>';
+    formHtml += '<div class="col-md-6">';
+    formHtml += '<div class="form-group">';
+    formHtml += '<label for="editCallsign" class="font-weight-bold">Callsign <span class="text-danger">*</span>:</label>';
+    formHtml += '<input type="text" class="form-control" id="editCallsign" name="callsign" value="' + (flight.callsign || '') + '" required>';
+    formHtml += '</div>';
+    formHtml += '</div>';
+    formHtml += '<div class="col-md-6">';
+    formHtml += '<div class="form-group">';
+    formHtml += '<label for="editAcType" class="font-weight-bold">Aircraft Type <span class="text-danger">*</span>:</label>';
+    formHtml += '<input type="text" class="form-control" id="editAcType" name="acType" value="' + (flight.acType || '') + '" required>';
+    formHtml += '</div>';
+    formHtml += '</div>';
+    formHtml += '</div>';
+
+    formHtml += '<div class="row mb-4">';
+    formHtml += '<div class="col-12">';
+    formHtml += '<h6 class="text-success mb-3"><i class="fa fa-map-marker-alt mr-2"></i>Airport Information</h6>';
+    formHtml += '</div>';
+    formHtml += '<div class="col-md-6">';
+    formHtml += '<div class="form-group">';
+    formHtml += '<label for="editDep" class="font-weight-bold">Departure Airport:</label>';
+    formHtml += '<select class="form-control" id="editDep" name="dep">';
+    formHtml += '<option value="">-- Select Airport --</option>';
+    // Airport options will be populated via AJAX
+    formHtml += '</select>';
+    formHtml += '</div>';
+    formHtml += '</div>';
+    formHtml += '<div class="col-md-6">';
+    formHtml += '<div class="form-group">';
+    formHtml += '<label for="editArr" class="font-weight-bold">Arrival Airport:</label>';
+    formHtml += '<select class="form-control" id="editArr" name="arr">';
+    formHtml += '<option value="">-- Select Airport --</option>';
+    // Airport options will be populated via AJAX
+    formHtml += '</select>';
+    formHtml += '</div>';
+    formHtml += '</div>';
+    formHtml += '</div>';
+
+    formHtml += '<div class="row mb-4">';
+    formHtml += '<div class="col-12">';
+    formHtml += '<h6 class="text-info mb-3"><i class="fa fa-clock mr-2"></i>Time Information</h6>';
+    formHtml += '</div>';
+    formHtml += '<div class="col-md-6">';
+    formHtml += '<div class="form-group">';
+    formHtml += '<label for="editStd" class="font-weight-bold">STD (Scheduled Time of Departure):</label>';
+    formHtml += '<input type="datetime-local" class="form-control" id="editStd" name="std" value="' + stdValue + '">';
+    formHtml += '</div>';
+    formHtml += '</div>';
+    formHtml += '<div class="col-md-6">';
+    formHtml += '<div class="form-group">';
+    formHtml += '<label for="editSta" class="font-weight-bold">STA (Scheduled Time of Arrival):</label>';
+    formHtml += '<input type="datetime-local" class="form-control" id="editSta" name="sta" value="' + staValue + '">';
+    formHtml += '</div>';
+    formHtml += '</div>';
+    formHtml += '</div>';
+
+    formHtml += '<div class="row mb-4">';
+    formHtml += '<div class="col-12">';
+    formHtml += '<h6 class="text-warning mb-3"><i class="fa fa-building mr-2"></i>Bay Assignment</h6>';
+    formHtml += '</div>';
+    formHtml += '<div class="col-md-12">';
+    formHtml += '<div class="form-group">';
+    formHtml += '<label class="font-weight-bold">Assigned Gate:</label>';
+    formHtml += '<select class="form-control" id="editBayId" name="bay_id">';
+    formHtml += '<option value="">-- Select Gate --</option>';
+    // Bay options will be populated via AJAX
+    formHtml += '</select>';
+    formHtml += '</div>';
+    formHtml += '</div>';
+    formHtml += '<div class="col-md-6">';
+    formHtml += '<div class="form-group">';
+    formHtml += '<label class="font-weight-bold">Booked From:</label>';
+    formHtml += '<input type="datetime-local" class="form-control" id="editBayAssignedFrom" name="bay_assigned_from" value="' + bayFromValue + '">';
+    formHtml += '</div>';
+    formHtml += '</div>';
+    formHtml += '<div class="col-md-6">';
+    formHtml += '<div class="form-group">';
+    formHtml += '<label class="font-weight-bold">Booked To:</label>';
+    formHtml += '<input type="datetime-local" class="form-control" id="editBayAssignedTo" name="bay_assigned_to" value="' + bayToValue + '">';
+    formHtml += '</div>';
+    formHtml += '</div>';
+    formHtml += '</div>';
+    formHtml += '</form>';
+
+    $('#flightDetailsContent').html(formHtml);
+
+    // Update modal footer for edit mode
+    let footerHtml = '<button type="button" class="btn btn-danger mr-2" onclick="deleteAdhocFlight(' + flight.id + ')">';
+    footerHtml += '<i class="fa fa-trash mr-1"></i>Delete Flight';
+    footerHtml += '</button>';
+    footerHtml += '<button type="button" class="btn btn-secondary mr-2" onclick="closeModalSafely()">';
+    footerHtml += '<i class="fa fa-times mr-1"></i>Cancel';
+    footerHtml += '</button>';
+    footerHtml += '<button type="button" class="btn btn-primary" id="saveAdhocFlightEditBtn">';
+    footerHtml += '<i class="fa fa-save mr-1"></i>Save Changes';
+    footerHtml += '</button>';
+
+    $('#flightDetailsModal .modal-footer').html(footerHtml);
+
+    // Add event listener for the save button
+    $('#saveAdhocFlightEditBtn').off('click').on('click', function() {
+        saveAdhocFlightEdit();
+    });
+
+    // Set the selected values after the form is created
+    setTimeout(() => {
+        // First populate the options
+        populateAirportOptions();
+
+        // Then set the selected values after a short delay
+        setTimeout(() => {
+            $('#editDep').val(flight.dep || '');
+            $('#editArr').val(flight.arr || '');
+            $('#editBayId').val(flight.bay_id || '');
+        }, 50);
+    }, 100);
+}
+
+// Populate airport and bay options function (global scope)
+function populateAirportOptions() {
+    // Get airports from the existing select elements in the page
+    const $existingDepSelect = $('#dep');
+    const $existingArrSelect = $('#arr');
+    const $existingBaySelect = $('#assignedGate');
+
+    if ($existingDepSelect.length > 0) {
+        const depOptions = $existingDepSelect.html();
+        $('#editDep').html(depOptions);
+    }
+
+    if ($existingArrSelect.length > 0) {
+        const arrOptions = $existingArrSelect.html();
+        $('#editArr').html(arrOptions);
+    }
+
+    if ($existingBaySelect.length > 0) {
+        const bayOptions = $existingBaySelect.html();
+        const $editBaySelect = $('#editBayId');
+        if ($editBaySelect.length > 0) {
+            $editBaySelect.html(bayOptions);
+        }
+    }
+}
+
+// Reload bay matrix function (global scope)
+function reloadBayMatrix() {
+    // Capture current scroll position before refresh
+    const $tableContainer = $('.table-container');
+    const scrollTop = $tableContainer.scrollTop();
+    const scrollLeft = $tableContainer.scrollLeft();
+
+    // Store the position for visual feedback
+    window.lastScrollPosition = { top: scrollTop, left: scrollLeft };
+
+    // Show loading indicator
+    $tableContainer.prepend(`
+        <div class="text-center p-3" id="tableLoadingIndicator">
+            <div class="spinner-border text-primary" role="status">
+                <span class="sr-only">Loading...</span>
+            </div>
+            <div class="mt-2">Updating bay assignments...</div>
+        </div>
+    `);
+
+    // Reload the page content via AJAX
+    $.ajax({
+        url: window.location.href,
+        method: 'GET',
+        success: function(response) {
+            // Extract the table content from the response
+            const $newContent = $(response);
+            const $newTable = $newContent.find('.table-container');
+
+            if ($newTable.length > 0) {
+                // Replace the table container
+                $tableContainer.replaceWith($newTable);
+
+                // Re-bind event handlers for the new table
+                initializeTableEventHandlers();
+
+                // Re-initialize tooltips for the new table
+                initializeTooltips();
+
+                // Re-apply current filters if any are selected
+                applyFilters();
+
+                // Refresh warning data after table update
+                generateWarningBannerFromMatrix();
+
+                // Restore scroll position after a brief delay to ensure DOM is ready
+                setTimeout(function() {
+                    const $newTableContainer = $('.table-container');
+
+                    // Ensure the scroll position doesn't exceed the new content dimensions
+                    const maxScrollTop = $newTableContainer[0].scrollHeight - $newTableContainer[0].clientHeight;
+                    const maxScrollLeft = $newTableContainer[0].scrollWidth - $newTableContainer[0].clientWidth;
+
+                    const adjustedScrollTop = Math.min(scrollTop, maxScrollTop);
+                    const adjustedScrollLeft = Math.min(scrollLeft, maxScrollLeft);
+
+                    // Only restore scroll position if it was greater than 0
+                    if (scrollTop > 0 || scrollLeft > 0) {
+                        $newTableContainer.scrollTop(adjustedScrollTop);
+                        $newTableContainer.scrollLeft(adjustedScrollLeft);
+
+                        // Add subtle visual feedback that position was restored
+                        $newTableContainer.addClass('position-restored');
+                        setTimeout(function() {
+                            $newTableContainer.removeClass('position-restored');
+                        }, 1000);
+                    }
+                }, 100); // Increased delay to ensure DOM is fully ready
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('Error reloading bay matrix:', error);
+            showMessage('danger', 'Error updating bay assignments. Please refresh the page.');
+        },
+        complete: function() {
+            // Remove loading indicator
+            $('#tableLoadingIndicator').remove();
+        }
+    });
+}
+
+// Save ad hoc flight edit function (global scope)
+function saveAdhocFlightEdit() {
+    const flightId = $('#editFlightId').val();
+    const formData = {
+        flight_id: flightId,
+        callsign: $('#editCallsign').val(),
+        acType: $('#editAcType').val(),
+        dep: $('#editDep').val(),
+        arr: $('#editArr').val(),
+        std: $('#editStd').val(),
+        sta: $('#editSta').val(),
+        bay_id: $('#editBayId').val(),
+        bay_assigned_from: $('#editBayAssignedFrom').val(),
+        bay_assigned_to: $('#editBayAssignedTo').val(),
+        _token: '{{ csrf_token() }}'
+    };
+
+    // Validate required fields
+    if (!formData.callsign || !formData.acType || !formData.bay_id) {
+        showModalMessage('danger', 'Please fill in all required fields (Callsign, Aircraft Type, and Gate).');
+        return;
+    }
+
+    // Show loading state
+    const $saveButton = $('#saveAdhocFlightEditBtn');
+    $saveButton.prop('disabled', true).html('<i class="fa fa-spinner fa-spin mr-1"></i> Saving...');
+
+    $.ajax({
+        url: '{{ route("admin.events.bay-management.update-adhoc-flight", $event) }}',
+        method: 'PUT',
+        data: formData,
+        success: function(response) {
+            if (response.success) {
+                // Show success message below breadcrumbs
+                showMessage('success', 'Ad hoc flight updated successfully!');
+                // Use the proper modal close function
+                closeModalSafely();
+                // Reload only the table/matrix (preserves scroll position)
+                reloadBayMatrix();
+            } else {
+                showModalMessage('danger', response.message || 'Error updating ad hoc flight.');
+            }
+        },
+        error: function(xhr) {
+            console.error('Error updating ad hoc flight:', xhr);
+            showModalMessage('danger', 'Error updating ad hoc flight. Please try again.');
+        },
+        complete: function() {
+            $saveButton.prop('disabled', false).html('<i class="fa fa-save mr-1"></i>Save Changes');
+        }
+    });
+}
+
 $(document).ready(function() {
     // Initialize table event handlers
     initializeTableEventHandlers();
@@ -585,23 +1344,36 @@ $(document).ready(function() {
         saveFlightDetails();
     });
 
-    function initializeTableEventHandlers() {
-        $(document).off('click', '.flight-assignment-cell').on('click', '.flight-assignment-cell', function(e) {
-            e.stopPropagation();
+    // Initialize ad hoc flight modal handlers
+    initializeAdhocFlightModal();
 
-            // Focus tracking
-            $('.flight-assignment-cell').removeClass('last-clicked');
-            $(this).addClass('last-clicked');
+    // Handle modal close events to prevent ARIA focus issues
+    $('#flightDetailsModal').on('hide.bs.modal', function() {
+        // Remove focus from any focused element BEFORE modal is hidden
+        if (document.activeElement && document.activeElement.blur) {
+            document.activeElement.blur();
+        }
+        // Return focus to the body to prevent ARIA issues
+        document.body.focus();
+    });
 
-            // Get flight data from the cell itself
-            const flightId = $(this).data('flight-id');
-            const assignmentType = $(this).data('assignment-type');
+    $('#flightDetailsModal').on('hidden.bs.modal', function() {
+        // Ensure no element has focus after modal is completely hidden
+        if (document.activeElement && document.activeElement.blur) {
+            document.activeElement.blur();
+        }
+        // Restore original modal footer for regular flights
+        restoreOriginalModalFooter();
+    });
 
-            if (flightId) {
-                loadFlightDetails(flightId, assignmentType);
-            }
-        });
-    }
+    // Handle modal show events to manage focus properly
+    $('#flightDetailsModal').on('shown.bs.modal', function() {
+        // Focus on the first input field when modal is shown
+        const firstInput = $(this).find('input, select, textarea').first();
+        if (firstInput.length) {
+            firstInput.focus();
+        }
+    });
 
     function initializeGateFilter() {
         let gateFilters = [];
@@ -681,68 +1453,6 @@ $(document).ready(function() {
         };
     }
 
-    function initializeTooltips() {
-        // Initialize Bootstrap tooltips for gate overlap warnings
-        $('[data-toggle="tooltip"]').tooltip({
-            trigger: 'hover',
-            placement: 'right',
-            container: 'body'
-        });
-    }
-
-    function applyFilters() {
-        const gateFilters = window.getGateFilters ? window.getGateFilters() : [];
-        const aircraftFilterText = $('#aircraftFilter').val().trim();
-
-        const $tableRows = $('.gate-table tbody tr');
-
-        $tableRows.each(function() {
-            const $row = $(this);
-            const gateName = $row.data('gate');
-            let showRow = true;
-
-            // Apply gate filters - this controls row visibility
-            if (gateFilters.length > 0) {
-                showRow = false;
-                for (let filter of gateFilters) {
-                    if (gateName && typeof gateName === 'string' && gateName.toLowerCase().startsWith(filter.toLowerCase())) {
-                        showRow = true;
-                        break;
-                    }
-                }
-            }
-
-            // Show or hide the entire row based on gate filter
-            if (showRow) {
-                $row.show();
-
-                // Apply aircraft filter to flight cells within visible rows
-                if (aircraftFilterText) {
-                    const $flightCells = $row.find('.flight-assignment-cell');
-
-                    $flightCells.each(function() {
-                        const $cell = $(this);
-                        const aircraftType = $cell.data('aircraft-type');
-
-                        if (aircraftType && aircraftType.toLowerCase().includes(aircraftFilterText.toLowerCase())) {
-                            // Show cells that match the aircraft filter with full opacity
-                            $cell.css('opacity', '1');
-                        } else {
-                            // Make non-matching cells very transparent
-                            $cell.css('opacity', '0.1');
-                        }
-                    });
-                } else {
-                    // If no aircraft filter, show all flight cells with full opacity
-                    $row.find('.flight-assignment-cell').css('opacity', '1');
-                }
-            } else {
-                // Hide the entire row if gate filter doesn't match
-                $row.hide();
-            }
-        });
-    }
-
     // Handle close button click
     $('#closeModalBtn').on('click', function() {
         closeModal();
@@ -773,7 +1483,6 @@ $(document).ready(function() {
             lastClickedCell.focus().removeClass('last-clicked');
         }
     });
-
 
     function loadFlightDetails(flightId, assignmentType) {
         // Show modal with loading state
@@ -881,146 +1590,6 @@ $(document).ready(function() {
             },
             complete: function() {
                 $('#saveFlightDetails').prop('disabled', false).html('Save Changes');
-            }
-        });
-    }
-
-    function showMessage(type, message) {
-        // Remove any existing messages
-        $('.bay-management-message').remove();
-
-        // Create message element
-        const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
-        const iconClass = type === 'success' ? 'fa-check' : 'fa-exclamation-triangle';
-
-        const messageHtml = `
-            <div class="alert ${alertClass} alert-dismissible bay-management-message" role="alert">
-                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
-                </button>
-                <i class="fa ${iconClass} mr-2"></i>${message}
-            </div>
-        `;
-
-        // Insert message below breadcrumbs
-        $('.container-fluid .row .col-12 .mb-3').after(messageHtml);
-
-        // Auto-dismiss success messages after 5 seconds
-        if (type === 'success') {
-            setTimeout(function() {
-                $('.bay-management-message').fadeOut(function() {
-                    $(this).remove();
-                });
-            }, 5000);
-        }
-    }
-
-    function showModalMessage(type, message) {
-        // Remove any existing modal messages
-        $('.modal-message').remove();
-
-        // Create message element
-        const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
-        const iconClass = type === 'success' ? 'fa-check' : 'fa-exclamation-triangle';
-
-        const messageHtml = `
-            <div class="alert ${alertClass} alert-dismissible modal-message" role="alert">
-                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
-                </button>
-                <i class="fa ${iconClass} mr-2"></i>${message}
-            </div>
-        `;
-
-        // Insert message at the top of the modal body
-        $('#flightDetailsContent').prepend(messageHtml);
-
-        // Auto-dismiss success messages after 5 seconds
-        if (type === 'success') {
-            setTimeout(function() {
-                $('.modal-message').fadeOut(function() {
-                    $(this).remove();
-                });
-            }, 5000);
-        }
-    }
-
-    function reloadBayMatrix() {
-        // Capture current scroll position before refresh
-        const $tableContainer = $('.table-container');
-        const scrollTop = $tableContainer.scrollTop();
-        const scrollLeft = $tableContainer.scrollLeft();
-        
-        // Store the position for visual feedback
-        window.lastScrollPosition = { top: scrollTop, left: scrollLeft };
-
-        // Show loading indicator
-        $tableContainer.prepend(`
-            <div class="text-center p-3" id="tableLoadingIndicator">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="sr-only">Loading...</span>
-                </div>
-                <div class="mt-2">Updating bay assignments...</div>
-            </div>
-        `);
-
-        // Reload the page content via AJAX
-        $.ajax({
-            url: window.location.href,
-            method: 'GET',
-            success: function(response) {
-                // Extract the table content from the response
-                const $newContent = $(response);
-                const $newTable = $newContent.find('.table-container');
-
-                if ($newTable.length > 0) {
-                    // Replace the table container
-                    $tableContainer.replaceWith($newTable);
-
-                    // Re-bind event handlers for the new table
-                    initializeTableEventHandlers();
-
-                    // Re-initialize tooltips for the new table
-                    initializeTooltips();
-
-                    // Re-apply current filters if any are selected
-                    applyFilters();
-
-                    // Refresh warning data after table update
-                    generateWarningBannerFromMatrix();
-
-                    // Restore scroll position after a brief delay to ensure DOM is ready
-                    setTimeout(function() {
-                        const $newTableContainer = $('.table-container');
-                        
-                        // Ensure the scroll position doesn't exceed the new content dimensions
-                        const maxScrollTop = $newTableContainer[0].scrollHeight - $newTableContainer[0].clientHeight;
-                        const maxScrollLeft = $newTableContainer[0].scrollWidth - $newTableContainer[0].clientWidth;
-                        
-                        const adjustedScrollTop = Math.min(scrollTop, maxScrollTop);
-                        const adjustedScrollLeft = Math.min(scrollLeft, maxScrollLeft);
-                        
-                        $newTableContainer.scrollTop(adjustedScrollTop);
-                        $newTableContainer.scrollLeft(adjustedScrollLeft);
-                        
-                        // Add subtle visual feedback that position was restored
-                        if (window.lastScrollPosition && 
-                            (window.lastScrollPosition.top > 0 || window.lastScrollPosition.left > 0)) {
-                            $newTableContainer.addClass('position-restored');
-                            setTimeout(function() {
-                                $newTableContainer.removeClass('position-restored');
-                            }, 1000);
-                        }
-                    }, 50);
-                }
-            },
-            error: function(xhr, status, error) {
-                console.error('Error reloading bay matrix:', error);
-                showMessage('danger', 'Error updating bay assignments. Please refresh the page.');
-            },
-            complete: function() {
-                // Remove loading indicator
-                $('#tableLoadingIndicator').remove();
             }
         });
     }
@@ -1348,6 +1917,325 @@ $(document).ready(function() {
             // Other formats go last
             return 'ZZ' + name;
         }
+    }
+
+    function initializeAdhocFlightModal() {
+        // Handle departure/arrival selection
+        $('#selectDeparture').on('click', function() {
+            selectFlightType('departure');
+        });
+
+        $('#selectArrival').on('click', function() {
+            selectFlightType('arrival');
+        });
+
+        // Handle save button
+        $('#saveAdhocFlight').on('click', function() {
+            saveAdhocFlight();
+        });
+
+        // Handle modal close - reset form
+        $('#adhocFlightModal').on('hidden.bs.modal', function() {
+            resetAdhocFlightModal();
+        });
+
+        // Handle STD/STA changes to recalculate booking times
+        $('#std, #sta').on('change', function() {
+            const flightType = $('#flightType').val();
+            if (flightType) {
+                calculateBookingTimes(flightType);
+            }
+        });
+    }
+
+    function selectFlightType(type) {
+        // Hide choice section and show form
+        $('#adhocChoiceSection').hide();
+        $('#adhocFlightForm').show();
+        $('#saveAdhocFlight').show();
+
+        // Set flight type
+        $('#flightType').val(type);
+        $('#assignmentTypeLabel').text(type === 'departure' ? 'Departure Bay Assignment' : 'Arrival Bay Assignment');
+
+        // Pre-select the assigned gate from the clicked cell
+        const bayId = getBayIdFromName(window.selectedAdhocData.gateName);
+        $('#assignedGate').val(bayId);
+
+        // Auto-populate airports based on event
+        autoPopulateAirports(type);
+
+        // Auto-populate STD/STA based on selected time slot
+        autoPopulateFlightTimes(type);
+
+        // Calculate and set booking times based on STD/STA
+        calculateBookingTimes(type);
+    }
+
+    function autoPopulateAirports(type) {
+        // Get event airports from the page data
+        const eventDepId = '{{ $event->dep }}';
+        const eventArrId = '{{ $event->arr }}';
+
+        if (type === 'departure') {
+            // For departure, set departure airport to event departure airport
+            $('#dep').val(eventDepId);
+        } else {
+            // For arrival, set arrival airport to event arrival airport
+            $('#arr').val(eventArrId);
+        }
+    }
+
+    function autoPopulateFlightTimes(type) {
+        const timeSlot = window.selectedAdhocData.timeSlot;
+
+        // Parse the time slot (format: "HH:MM")
+        const [hours, minutes] = timeSlot.split(':').map(Number);
+
+        // Use event date instead of today's date
+        const eventDate = '{{ $event->startEvent->format("Y-m-d") }}';
+        const baseTime = new Date(eventDate + 'T' + timeSlot + ':00');
+
+        if (type === 'departure') {
+            // For departure, set STD to the selected time slot
+            $('#std').val(formatDateTimeLocal(baseTime));
+        } else {
+            // For arrival, set STA to the selected time slot
+            $('#sta').val(formatDateTimeLocal(baseTime));
+        }
+    }
+
+    function getBayIdFromName(gateName) {
+        // Get bay ID from the stored data
+        return window.selectedAdhocData ? window.selectedAdhocData.bayId : null;
+    }
+
+    function calculateBookingTimes(type) {
+        let baseTime;
+
+        if (type === 'departure') {
+            // For departure, use STD (CTOT) as the base time
+            const stdValue = $('#std').val();
+            if (!stdValue) return; // No STD set yet
+            baseTime = new Date(stdValue);
+        } else {
+            // For arrival, use STA (ETA) as the base time
+            const staValue = $('#sta').val();
+            if (!staValue) return; // No STA set yet
+            baseTime = new Date(staValue);
+        }
+
+        // Validate that the time is within the event date range
+        const eventStart = new Date('{{ $event->startEvent->format("Y-m-d") }}');
+        const eventEnd = new Date('{{ $event->endEvent->format("Y-m-d") }}');
+        // For same-day events, allow the full day
+        if (eventStart.getTime() === eventEnd.getTime()) {
+            eventEnd.setHours(23, 59, 59, 999); // End of day
+        } else {
+            eventEnd.setDate(eventEnd.getDate() + 1); // Next day
+        }
+
+        // Compare only the date parts, not the time
+        const baseDateOnly = new Date(baseTime.getFullYear(), baseTime.getMonth(), baseTime.getDate());
+        const eventStartDate = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate());
+        const eventEndDate = new Date(eventEnd.getFullYear(), eventEnd.getMonth(), eventEnd.getDate());
+
+        if (baseDateOnly < eventStartDate || baseDateOnly > eventEndDate) {
+            alert('Flight time must be within the event date range ({{ $event->startEvent->format("Y-m-d") }} to {{ $event->endEvent->format("Y-m-d") }})');
+            return;
+        }
+
+        // Calculate booking times based on existing BayAssignmentService logic
+        // For departure: 20 minutes before to actual time (CTOT)
+        // For arrival: 20 minutes before to 15 minutes after (ETA)
+        const bookingFrom = new Date(baseTime);
+        const bookingTo = new Date(baseTime);
+
+        if (type === 'departure') {
+            // Departure: 20 min before to actual CTOT
+            bookingFrom.setMinutes(bookingFrom.getMinutes() - 20);
+            // bookingTo stays at the actual time (CTOT)
+        } else {
+            // Arrival: 20 min before to 15 min after ETA
+            bookingFrom.setMinutes(bookingFrom.getMinutes() - 20);
+            bookingTo.setMinutes(bookingTo.getMinutes() + 15);
+        }
+
+        // Set the form values
+        $('#bayAssignedFrom').val(formatDateTimeLocal(bookingFrom));
+        $('#bayAssignedTo').val(formatDateTimeLocal(bookingTo));
+    }
+
+    function formatDateTimeLocal(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    }
+
+    function saveAdhocFlight() {
+        // Validate required fields
+        if (!$('#callsign').val() || !$('#acType').val() || !$('#assignedGate').val()) {
+            showModalMessage('danger', 'Please fill in all required fields (Callsign, Aircraft Type, and Gate).');
+            return;
+        }
+
+        // Validate dates are within event range
+        const eventStart = new Date('{{ $event->startEvent->format("Y-m-d") }}');
+        const eventEnd = new Date('{{ $event->endEvent->format("Y-m-d") }}');
+        // For same-day events, allow the full day
+        if (eventStart.getTime() === eventEnd.getTime()) {
+            eventEnd.setHours(23, 59, 59, 999); // End of day
+        } else {
+            eventEnd.setDate(eventEnd.getDate() + 1); // Next day
+        }
+
+        const stdValue = $('#std').val();
+        const staValue = $('#sta').val();
+        const bayFromValue = $('#bayAssignedFrom').val();
+        const bayToValue = $('#bayAssignedTo').val();
+
+        if (stdValue) {
+            const stdDate = new Date(stdValue);
+            const stdDateOnly = new Date(stdDate.getFullYear(), stdDate.getMonth(), stdDate.getDate());
+            const eventStartDate = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate());
+            const eventEndDate = new Date(eventEnd.getFullYear(), eventEnd.getMonth(), eventEnd.getDate());
+
+            if (stdDateOnly < eventStartDate || stdDateOnly > eventEndDate) {
+                showModalMessage('danger', 'STD must be within the event date range ({{ $event->startEvent->format("Y-m-d") }} to {{ $event->endEvent->format("Y-m-d") }}).');
+                return;
+            }
+        }
+
+        if (staValue) {
+            const staDate = new Date(staValue);
+            const staDateOnly = new Date(staDate.getFullYear(), staDate.getMonth(), staDate.getDate());
+            const eventStartDate = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate());
+            const eventEndDate = new Date(eventEnd.getFullYear(), eventEnd.getMonth(), eventEnd.getDate());
+
+            if (staDateOnly < eventStartDate || staDateOnly > eventEndDate) {
+                showModalMessage('danger', 'STA must be within the event date range ({{ $event->startEvent->format("Y-m-d") }} to {{ $event->endEvent->format("Y-m-d") }}).');
+                return;
+            }
+        }
+
+        if (bayFromValue) {
+            const bayFromDate = new Date(bayFromValue);
+            const bayFromDateOnly = new Date(bayFromDate.getFullYear(), bayFromDate.getMonth(), bayFromDate.getDate());
+            const eventStartDate = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate());
+            const eventEndDate = new Date(eventEnd.getFullYear(), eventEnd.getMonth(), eventEnd.getDate());
+
+            if (bayFromDateOnly < eventStartDate || bayFromDateOnly > eventEndDate) {
+                showModalMessage('danger', 'Bay assignment times must be within the event date range ({{ $event->startEvent->format("Y-m-d") }} to {{ $event->endEvent->format("Y-m-d") }}).');
+                return;
+            }
+        }
+
+        if (bayToValue) {
+            const bayToDate = new Date(bayToValue);
+            const bayToDateOnly = new Date(bayToDate.getFullYear(), bayToDate.getMonth(), bayToDate.getDate());
+            const eventStartDate = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate());
+            const eventEndDate = new Date(eventEnd.getFullYear(), eventEnd.getMonth(), eventEnd.getDate());
+
+            if (bayToDateOnly < eventStartDate || bayToDateOnly > eventEndDate) {
+                showModalMessage('danger', 'Bay assignment times must be within the event date range ({{ $event->startEvent->format("Y-m-d") }} to {{ $event->endEvent->format("Y-m-d") }}).');
+                return;
+            }
+        }
+
+        const form = $('#adhocFlightFormData');
+        const formData = form.serialize();
+
+        // Add the selected bay ID to the form data
+        const bayId = $('#assignedGate').val();
+        const formDataWithBay = formData + '&bay_id=' + encodeURIComponent(bayId);
+
+        // Show loading state
+        $('#saveAdhocFlight').prop('disabled', true).html('<i class="fa fa-spinner fa-spin mr-1"></i> Saving...');
+
+        $.ajax({
+            url: '{{ route("admin.events.bay-management.store-adhoc-flight", $event) }}',
+            method: 'POST',
+            data: formDataWithBay,
+            headers: {
+                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+            },
+            success: function(response) {
+                if (response.overlap_detected && !response.force_save) {
+                    // Show browser confirmation dialog for overlap
+                    const userConfirmed = confirm(response.overlap_message);
+
+                    if (userConfirmed) {
+                        // Retry with force save
+                        const forceData = formDataWithBay + '&force_save=true';
+                        $.ajax({
+                            url: '{{ route("admin.events.bay-management.store-adhoc-flight", $event) }}',
+                            method: 'POST',
+                            data: forceData,
+                            headers: {
+                                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                            },
+                            success: function(response) {
+                                handleAdhocFlightSuccess(response);
+                            },
+                            error: function(xhr) {
+                                handleAdhocFlightError(xhr);
+                            }
+                        });
+                        return;
+                    } else {
+                        // User cancelled, reset button state
+                        $('#saveAdhocFlight').prop('disabled', false).html('<i class="fa fa-save mr-1"></i>Save Ad Hoc Flight');
+                        return;
+                    }
+                }
+
+                handleAdhocFlightSuccess(response);
+            },
+            error: function(xhr) {
+                handleAdhocFlightError(xhr);
+            }
+        });
+    }
+
+    function handleAdhocFlightSuccess(response) {
+        // Close modal
+        $('#adhocFlightModal').modal('hide');
+
+        // Show success message
+        showMessage('success', response.message || 'Ad hoc flight created successfully!');
+
+        // Reload the bay matrix
+        reloadBayMatrix();
+
+        // Reset button state
+        $('#saveAdhocFlight').prop('disabled', false).html('<i class="fa fa-save mr-1"></i>Save Ad Hoc Flight');
+    }
+
+    function handleAdhocFlightError(xhr) {
+        const errorMsg = xhr.responseJSON?.message || 'Error creating ad hoc flight. Please try again.';
+        showModalMessage('danger', errorMsg);
+
+        // Reset button state
+        $('#saveAdhocFlight').prop('disabled', false).html('<i class="fa fa-save mr-1"></i>Save Ad Hoc Flight');
+    }
+
+    function resetAdhocFlightModal() {
+        // Reset form
+        $('#adhocFlightFormData')[0].reset();
+
+        // Hide form and show choice section
+        $('#adhocFlightForm').hide();
+        $('#adhocChoiceSection').show();
+        $('#saveAdhocFlight').hide();
+
+        // Clear any existing modal messages
+        $('.modal-message').remove();
+
+        // Clear selected data
+        window.selectedAdhocData = null;
     }
 });
 </script>

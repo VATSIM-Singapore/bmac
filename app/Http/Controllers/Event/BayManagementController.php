@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Event;
 
 use App\Http\Controllers\Controller;
+use App\Models\AdhocFlight;
 use App\Models\Event;
 use App\Models\Bay;
 use App\Models\Flight;
@@ -44,13 +45,19 @@ class BayManagementController extends Controller
             })
             ->get();
 
-        // Determine time range from bay assignments
-        $timeRange = $this->calculateTimeRange($event, $flights);
+        // Get all ad hoc flights for this event that have bay assignments
+        $adhocFlights = AdhocFlight::where('event_id', $event->id)
+            ->with(['bay', 'airportDep', 'airportArr'])
+            ->whereNotNull('bay_id')
+            ->get();
+
+        // Determine time range from bay assignments (including ad hoc flights)
+        $timeRange = $this->calculateTimeRange($event, $flights, $adhocFlights);
 
         // Generate 5-minute time slots
         $timeSlots = $this->generateTimeSlots($timeRange['start'], $timeRange['end']);
 
-        $bayUsage = $this->buildBayUsage($bays, $flights, $timeSlots, $event);
+        $bayUsage = $this->buildBayUsage($bays, $flights, $timeSlots, $event, $adhocFlights);
 
         return view('event.bay-management.index', compact(
             'event',
@@ -62,13 +69,17 @@ class BayManagementController extends Controller
         ));
     }
 
-    private function calculateTimeRange(Event $event, $flights)
+    private function calculateTimeRange(Event $event, $flights, $adhocFlights = null)
     {
         // Start with event times with 1-hour buffer
         $startTime = $event->startEvent->copy()->subHour();
         $endTime = $event->endEvent->copy()->addHour();
 
-        // Expand based on actual bay assignments
+        // Set reasonable bounds to prevent extreme time ranges
+        $minTime = $event->startEvent->copy()->subDay(); // 1 day before event
+        $maxTime = $event->endEvent->copy()->addDay();   // 1 day after event
+
+        // Expand based on actual bay assignments from regular flights
         foreach ($flights as $flight) {
             $times = [
                 $flight->dep_bay_assigned_from,
@@ -80,11 +91,40 @@ class BayManagementController extends Controller
             foreach ($times as $time) {
                 if ($time) {
                     $parsedTime = Carbon::parse($time);
-                    if ($parsedTime->lt($startTime)) {
-                        $startTime = $parsedTime;
+                    // Only consider times within reasonable bounds
+                    if ($parsedTime->gte($minTime) && $parsedTime->lte($maxTime)) {
+                        if ($parsedTime->lt($startTime)) {
+                            $startTime = $parsedTime;
+                        }
+                        if ($parsedTime->gt($endTime)) {
+                            $endTime = $parsedTime;
+                        }
                     }
-                    if ($parsedTime->gt($endTime)) {
-                        $endTime = $parsedTime;
+                }
+            }
+        }
+
+        // Expand based on actual bay assignments from ad hoc flights
+        if ($adhocFlights) {
+            foreach ($adhocFlights as $adhocFlight) {
+                $times = [
+                    $adhocFlight->bay_assigned_from,
+                    $adhocFlight->bay_assigned_to
+                ];
+
+                foreach ($times as $time) {
+                    if ($time) {
+                        // $time is already a Carbon instance due to model casts
+                        $parsedTime = $time instanceof Carbon ? $time : Carbon::parse($time);
+                        // Only consider times within reasonable bounds
+                        if ($parsedTime->gte($minTime) && $parsedTime->lte($maxTime)) {
+                            if ($parsedTime->lt($startTime)) {
+                                $startTime = $parsedTime;
+                            }
+                            if ($parsedTime->gt($endTime)) {
+                                $endTime = $parsedTime;
+                            }
+                        }
                     }
                 }
             }
@@ -120,7 +160,7 @@ class BayManagementController extends Controller
     /**
      * Build bay usage data structure using sparse matrix approach
      */
-    private function buildBayUsage($bays, $flights, $timeSlots, $event)
+    private function buildBayUsage($bays, $flights, $timeSlots, $event, $adhocFlights = null)
     {
         // Use sparse matrix - only store non-empty slots
         $matrix = [];
@@ -131,10 +171,17 @@ class BayManagementController extends Controller
             $matrix[$bayId] = [];
         }
 
-        // Process flights
+        // Process regular flights
         foreach ($flights as $flight) {
             $this->addFlightToMatrix($matrix, $flight, $timeSlots, $event, 'departure');
             $this->addFlightToMatrix($matrix, $flight, $timeSlots, $event, 'arrival');
+        }
+
+        // Process ad hoc flights
+        if ($adhocFlights) {
+            foreach ($adhocFlights as $adhocFlight) {
+                $this->addAdhocFlightToMatrix($matrix, $adhocFlight, $timeSlots, $event);
+            }
         }
 
         // Organize data for view display - group by row for each bay
@@ -219,6 +266,91 @@ class BayManagementController extends Controller
                 if (isset($existing['flight']) &&
                     $existing['flight']->id === $flight->id &&
                     $existing['type'] === $type) {
+                    $alreadyExists = true;
+                    break;
+                }
+            }
+
+            if (!$alreadyExists) {
+                $slotData = $assignmentData;
+                // Only apply colspan to the first slot
+                if ($index > 0) {
+                    $slotData['colspan'] = 1;
+                }
+                $matrix[$bayId][$timeKey][] = $slotData;
+            }
+        }
+    }
+
+    /**
+     * Add ad hoc flight to matrix using interval-based approach
+     */
+    private function addAdhocFlightToMatrix(&$matrix, $adhocFlight, $timeSlots, $event)
+    {
+        if (!$adhocFlight->bay_id || !$adhocFlight->bay_assigned_from || !$adhocFlight->bay_assigned_to) {
+            return;
+        }
+
+        $bayId = $adhocFlight->bay_id;
+        // These are already Carbon instances due to model casts
+        $assignedFrom = $adhocFlight->bay_assigned_from instanceof Carbon ? $adhocFlight->bay_assigned_from : Carbon::parse($adhocFlight->bay_assigned_from);
+        $assignedTo = $adhocFlight->bay_assigned_to instanceof Carbon ? $adhocFlight->bay_assigned_to : Carbon::parse($adhocFlight->bay_assigned_to);
+
+        // Use binary search to find affected time slots
+        $affectedSlots = $this->findAffectedTimeSlots($timeSlots, $assignedFrom, $assignedTo);
+
+        if (empty($affectedSlots)) {
+            return;
+        }
+
+        // Create assignment data once
+        $callsign = $adhocFlight->callsign ?? 'Unknown';
+        $callsign .= ' (Ad Hoc)';
+
+        // Determine the relevant airport and flight type based on which one matches the event
+        $relevantAirport = 'Unknown';
+        $relevantAirportIcao = null;
+        $flightType = 'departure'; // Default to departure
+
+        if ($adhocFlight->dep == $event->dep) {
+            $relevantAirport = $adhocFlight->airportArr->name ?? 'Unknown';
+            $relevantAirportIcao = $adhocFlight->airportArr->icao ?? null;
+            $flightType = 'departure';
+        } elseif ($adhocFlight->arr == $event->arr) {
+            $relevantAirport = $adhocFlight->airportDep->name ?? 'Unknown';
+            $relevantAirportIcao = $adhocFlight->airportDep->icao ?? null;
+            $flightType = 'arrival';
+        }
+
+        $assignmentData = [
+            'flight' => $adhocFlight,
+            'type' => 'adhoc',
+            'flight_type' => $flightType,
+            'colspan' => count($affectedSlots),
+            'callsign' => $callsign,
+            'aircraft_type' => $adhocFlight->acType ?? 'Unknown',
+            'relevant_airport' => $relevantAirport,
+            'relevant_airport_icao' => $relevantAirportIcao,
+            'time_from' => $assignedFrom->format('H:i'),
+            'time_to' => $assignedTo->format('H:i')
+        ];
+
+        // Add flight to affected time slots
+        foreach ($affectedSlots as $index => $timeSlotIndex) {
+            $timeSlot = $timeSlots[$timeSlotIndex];
+            $timeKey = $timeSlot->format('Y-m-d H:i');
+
+            if (!isset($matrix[$bayId][$timeKey])) {
+                $matrix[$bayId][$timeKey] = [];
+            }
+
+            // Check for duplicates
+            $alreadyExists = false;
+
+            foreach ($matrix[$bayId][$timeKey] as $existing) {
+                if (isset($existing['flight']) &&
+                    $existing['flight']->id === $adhocFlight->id &&
+                    $existing['type'] === 'adhoc') {
                     $alreadyExists = true;
                     break;
                 }
@@ -708,5 +840,379 @@ class BayManagementController extends Controller
                 'message' => 'Error unblocking bay: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Store a new ad hoc flight
+     */
+    public function storeAdhocFlight(Event $event, Request $request): JsonResponse
+    {
+        // Ensure this is a Real Flight Ops event
+        if ($event->event_type_id !== EventType::REALFLIGHTOPS->value) {
+            return response()->json(['error' => 'Bay management is only available for Real Flight Ops events.'], 403);
+        }
+
+        $request->validate([
+            'callsign' => 'required|string|max:255',
+            'acType' => 'required|string|max:255',
+            'dep' => 'nullable|exists:airports,id',
+            'arr' => 'nullable|exists:airports,id',
+            'std' => 'nullable|date',
+            'sta' => 'nullable|date',
+            'bay_id' => 'required|exists:bays,id',
+            'time_slot' => 'required|string',
+            'flight_type' => 'required|in:departure,arrival',
+            'bay_assigned_from' => 'required|date',
+            'bay_assigned_to' => 'required|date|after:bay_assigned_from',
+        ]);
+
+        // Validate that all dates are within the event date range
+        $eventStart = $event->startEvent->copy()->startOfDay();
+        $eventEnd = $event->endEvent->copy()->endOfDay();
+
+        if ($request->std) {
+            $stdDate = Carbon::parse($request->std);
+            if ($stdDate->lt($eventStart) || $stdDate->gt($eventEnd)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'STD must be within the event date range (' . $event->startEvent->format('Y-m-d') . ' to ' . $event->endEvent->format('Y-m-d') . ')'
+                ], 422);
+            }
+        }
+
+        if ($request->sta) {
+            $staDate = Carbon::parse($request->sta);
+            if ($staDate->lt($eventStart) || $staDate->gt($eventEnd)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'STA must be within the event date range (' . $event->startEvent->format('Y-m-d') . ' to ' . $event->endEvent->format('Y-m-d') . ')'
+                ], 422);
+            }
+        }
+
+        $bayFromDate = Carbon::parse($request->bay_assigned_from);
+        $bayToDate = Carbon::parse($request->bay_assigned_to);
+
+        if ($bayFromDate->lt($eventStart) || $bayFromDate->gt($eventEnd) ||
+            $bayToDate->lt($eventStart) || $bayToDate->gt($eventEnd)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Bay assignment times must be within the event date range (' . $event->startEvent->format('Y-m-d') . ' to ' . $event->endEvent->format('Y-m-d') . ')'
+            ], 422);
+        }
+
+        try {
+            // Check for overlapping bookings
+            $overlapWarning = $this->checkForAdhocOverlappingBookings($event, $request);
+
+            if ($overlapWarning && !$request->get('force_save', false)) {
+                return response()->json([
+                    'overlap_detected' => true,
+                    'overlap_message' => $overlapWarning,
+                ]);
+            }
+
+            // Create the ad hoc flight
+            $adhocFlight = AdhocFlight::create([
+                'event_id' => $event->id,
+                'callsign' => $request->callsign,
+                'acType' => $request->acType,
+                'dep' => $request->dep,
+                'arr' => $request->arr,
+                'std' => $request->std ? Carbon::parse($request->std) : null,
+                'sta' => $request->sta ? Carbon::parse($request->sta) : null,
+                'bay_id' => $request->bay_id,
+                'bay_assigned_from' => Carbon::parse($request->bay_assigned_from),
+                'bay_assigned_to' => Carbon::parse($request->bay_assigned_to),
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Ad hoc flight created successfully!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error creating ad hoc flight: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get ad hoc flight details
+     */
+    public function getAdhocFlight(Event $event, Request $request): JsonResponse
+    {
+        $request->validate([
+            'flight_id' => 'required|exists:adhoc_flights,id'
+        ]);
+
+        try {
+            $adhocFlight = AdhocFlight::with(['airportDep', 'airportArr', 'bay'])
+                ->where('id', $request->flight_id)
+                ->where('event_id', $event->id)
+                ->first();
+
+            if (!$adhocFlight) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ad hoc flight not found.'
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'flight' => [
+                    'id' => $adhocFlight->id,
+                    'callsign' => $adhocFlight->callsign,
+                    'acType' => $adhocFlight->acType,
+                    'dep' => $adhocFlight->dep,
+                    'arr' => $adhocFlight->arr,
+                    'dep_airport' => $adhocFlight->airportDep ? $adhocFlight->airportDep->name . ' (' . $adhocFlight->airportDep->icao . ')' : null,
+                    'arr_airport' => $adhocFlight->airportArr ? $adhocFlight->airportArr->name . ' (' . $adhocFlight->airportArr->icao . ')' : null,
+                    'bay_id' => $adhocFlight->bay_id,
+                    'bay_name' => $adhocFlight->bay ? $adhocFlight->bay->name : null,
+                    'bay_assigned_from' => $adhocFlight->bay_assigned_from,
+                    'bay_assigned_to' => $adhocFlight->bay_assigned_to,
+                    'std' => $adhocFlight->std,
+                    'sta' => $adhocFlight->sta,
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error retrieving ad hoc flight: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update ad hoc flight
+     */
+    public function updateAdhocFlight(Event $event, Request $request): JsonResponse
+    {
+        // Ensure this is a Real Flight Ops event
+        if ($event->event_type_id !== EventType::REALFLIGHTOPS->value) {
+            return response()->json(['error' => 'Bay management is only available for Real Flight Ops events.'], 403);
+        }
+
+        $request->validate([
+            'flight_id' => 'required|exists:adhoc_flights,id',
+            'callsign' => 'required|string|max:255',
+            'acType' => 'required|string|max:255',
+            'dep' => 'nullable|exists:airports,id',
+            'arr' => 'nullable|exists:airports,id',
+            'std' => 'nullable|date',
+            'sta' => 'nullable|date',
+            'bay_id' => 'required|exists:bays,id',
+            'bay_assigned_from' => 'required|date',
+            'bay_assigned_to' => 'required|date|after:bay_assigned_from',
+        ]);
+
+        // Validate that all dates are within the event date range
+        $eventStart = $event->startEvent->copy()->startOfDay();
+        $eventEnd = $event->endEvent->copy()->endOfDay();
+
+        if ($request->std) {
+            $stdDate = Carbon::parse($request->std);
+            if ($stdDate->lt($eventStart) || $stdDate->gt($eventEnd)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'STD must be within the event date range (' . $event->startEvent->format('Y-m-d') . ' to ' . $event->endEvent->format('Y-m-d') . ')'
+                ], 422);
+            }
+        }
+
+        if ($request->sta) {
+            $staDate = Carbon::parse($request->sta);
+            if ($staDate->lt($eventStart) || $staDate->gt($eventEnd)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'STA must be within the event date range (' . $event->startEvent->format('Y-m-d') . ' to ' . $event->endEvent->format('Y-m-d') . ')'
+                ], 422);
+            }
+        }
+
+        $bayFromDate = Carbon::parse($request->bay_assigned_from);
+        $bayToDate = Carbon::parse($request->bay_assigned_to);
+
+        if ($bayFromDate->lt($eventStart) || $bayFromDate->gt($eventEnd) ||
+            $bayToDate->lt($eventStart) || $bayToDate->gt($eventEnd)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Bay assignment times must be within the event date range (' . $event->startEvent->format('Y-m-d') . ' to ' . $event->endEvent->format('Y-m-d') . ')'
+            ], 422);
+        }
+
+        try {
+            // Find the ad hoc flight
+            $adhocFlight = AdhocFlight::where('event_id', $event->id)
+                ->where('callsign', $request->callsign)
+                ->first();
+
+            if (!$adhocFlight) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ad hoc flight not found.'
+                ], 404);
+            }
+
+            // Update the ad hoc flight
+            $adhocFlight->update([
+                'callsign' => $request->callsign,
+                'acType' => $request->acType,
+                'dep' => $request->dep,
+                'arr' => $request->arr,
+                'std' => $request->std ? Carbon::parse($request->std) : null,
+                'sta' => $request->sta ? Carbon::parse($request->sta) : null,
+                'bay_id' => $request->bay_id,
+                'bay_assigned_from' => Carbon::parse($request->bay_assigned_from),
+                'bay_assigned_to' => Carbon::parse($request->bay_assigned_to),
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Ad hoc flight updated successfully!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error updating ad hoc flight: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete ad hoc flight
+     */
+    public function deleteAdhocFlight(Event $event, Request $request): JsonResponse
+    {
+        $request->validate([
+            'flight_id' => 'required|exists:adhoc_flights,id'
+        ]);
+
+        try {
+            $adhocFlight = AdhocFlight::where('id', $request->flight_id)
+                ->where('event_id', $event->id)
+                ->first();
+
+            if (!$adhocFlight) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ad hoc flight not found.'
+                ], 404);
+            }
+
+            $adhocFlight->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Ad hoc flight deleted successfully!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error deleting ad hoc flight: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Check for overlapping bookings for ad hoc flights
+     */
+    private function checkForAdhocOverlappingBookings(Event $event, Request $request): ?string
+    {
+        $bayId = $request->bay_id;
+        $assignedFrom = Carbon::parse($request->bay_assigned_from);
+        $assignedTo = Carbon::parse($request->bay_assigned_to);
+        $flightType = $request->flight_type;
+
+        // Check for overlaps with existing flights
+        $overlappingFlights = Flight::whereHas('booking', function ($query) use ($event) {
+            $query->where('event_id', $event->id);
+        })
+            ->where(function ($query) use ($bayId) {
+                $query->where('dep_bay', $bayId)
+                    ->orWhere('arr_bay', $bayId);
+            })
+            ->where(function ($query) use ($assignedFrom, $assignedTo) {
+                $query->where(function ($subQuery) use ($assignedFrom, $assignedTo) {
+                    $subQuery->whereNotNull('dep_bay_assigned_from')
+                        ->whereNotNull('dep_bay_assigned_to')
+                        ->where('dep_bay_assigned_from', '<', $assignedTo)
+                        ->where('dep_bay_assigned_to', '>', $assignedFrom);
+                })
+                ->orWhere(function ($subQuery) use ($assignedFrom, $assignedTo) {
+                    $subQuery->whereNotNull('arr_bay_assigned_from')
+                        ->whereNotNull('arr_bay_assigned_to')
+                        ->where('arr_bay_assigned_from', '<', $assignedTo)
+                        ->where('arr_bay_assigned_to', '>', $assignedFrom);
+                });
+            })
+            ->with(['booking'])
+            ->get();
+
+        // Check for overlaps with existing ad hoc flights
+        $overlappingAdhocFlights = AdhocFlight::where('event_id', $event->id)
+            ->where('bay_id', $bayId)
+            ->where(function ($query) use ($assignedFrom, $assignedTo) {
+                $query->whereNotNull('bay_assigned_from')
+                    ->whereNotNull('bay_assigned_to')
+                    ->where('bay_assigned_from', '<', $assignedTo)
+                    ->where('bay_assigned_to', '>', $assignedFrom);
+            })
+            ->get();
+
+        if ($overlappingFlights->isEmpty() && $overlappingAdhocFlights->isEmpty()) {
+            return null;
+        }
+
+        $bayName = Bay::find($bayId)?->name ?? 'Unknown';
+        $overlappingDetails = [];
+
+        // Process regular flight overlaps
+        foreach ($overlappingFlights as $overlappingFlight) {
+            $callsign = $overlappingFlight->booking->callsign ?? 'Unknown';
+            $overlapType = '';
+            $fromTime = '';
+            $toTime = '';
+
+            if ($overlappingFlight->dep_bay == $bayId &&
+                $overlappingFlight->dep_bay_assigned_from &&
+                $overlappingFlight->dep_bay_assigned_to &&
+                $overlappingFlight->dep_bay_assigned_from < $assignedTo &&
+                $overlappingFlight->dep_bay_assigned_to > $assignedFrom) {
+                $overlapType = 'departure';
+                $fromTime = Carbon::parse($overlappingFlight->dep_bay_assigned_from)->format('H:i');
+                $toTime = Carbon::parse($overlappingFlight->dep_bay_assigned_to)->format('H:i');
+            } elseif ($overlappingFlight->arr_bay == $bayId &&
+                    $overlappingFlight->arr_bay_assigned_from &&
+                    $overlappingFlight->arr_bay_assigned_to &&
+                    $overlappingFlight->arr_bay_assigned_from < $assignedTo &&
+                    $overlappingFlight->arr_bay_assigned_to > $assignedFrom) {
+                $overlapType = 'arrival';
+                $fromTime = Carbon::parse($overlappingFlight->arr_bay_assigned_from)->format('H:i');
+                $toTime = Carbon::parse($overlappingFlight->arr_bay_assigned_to)->format('H:i');
+            }
+
+            if ($overlapType) {
+                $overlappingDetails[] = "{$callsign} ({$overlapType}: {$fromTime}-{$toTime})";
+            }
+        }
+
+        // Process ad hoc flight overlaps
+        foreach ($overlappingAdhocFlights as $overlappingFlight) {
+            $callsign = $overlappingFlight->callsign;
+            $fromTime = $overlappingFlight->bay_assigned_from->format('H:i');
+            $toTime = $overlappingFlight->bay_assigned_to->format('H:i');
+
+            $overlappingDetails[] = "{$callsign} (Ad Hoc: {$fromTime}-{$toTime})";
+        }
+
+        $newFromTime = $assignedFrom->format('H:i');
+        $newToTime = $assignedTo->format('H:i');
+        $overlappingText = implode(', ', $overlappingDetails);
+
+        return "Bay {$bayName} {$flightType} assignment ({$newFromTime}-{$newToTime}) overlaps with existing booking(s): {$overlappingText}. Do you want to proceed anyway?";
     }
 }

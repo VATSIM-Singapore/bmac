@@ -106,6 +106,16 @@ Route::group(['as' => 'admin.', 'prefix' => 'admin', 'middleware' => 'auth.isAdm
         ->name('events.bay-management.block-bay');
     Route::delete('{event}/bay-management/unblock-bay', [App\Http\Controllers\Event\BayManagementController::class, 'unblockBay'])
         ->name('events.bay-management.unblock-bay');
+
+    // Ad Hoc Flight Routes
+    Route::post('{event}/bay-management/store-adhoc-flight', [App\Http\Controllers\Event\BayManagementController::class, 'storeAdhocFlight'])
+        ->name('events.bay-management.store-adhoc-flight');
+    Route::get('{event}/bay-management/get-adhoc-flight', [App\Http\Controllers\Event\BayManagementController::class, 'getAdhocFlight'])
+        ->name('events.bay-management.get-adhoc-flight');
+    Route::put('{event}/bay-management/update-adhoc-flight', [App\Http\Controllers\Event\BayManagementController::class, 'updateAdhocFlight'])
+        ->name('events.bay-management.update-adhoc-flight');
+    Route::delete('{event}/bay-management/delete-adhoc-flight', [App\Http\Controllers\Event\BayManagementController::class, 'deleteAdhocFlight'])
+        ->name('events.bay-management.delete-adhoc-flight');
 });
 
 Route::resource('bookings', BookingController::class)->only(['show', 'edit', 'update']);

@@ -1028,6 +1028,40 @@ function loadAdhocFlightForEdit(flightId) {
     });
 }
 
+// Load flight details function (global scope)
+function loadFlightDetails(flightId, assignmentType) {
+    // Show modal with loading state
+    $('#flightDetailsModal').modal('show');
+    $('#flightDetailsContent').html(`
+        <div class="text-center">
+            <div class="spinner-border" role="status">
+                <span class="sr-only">Loading...</span>
+            </div>
+        </div>
+    `);
+    $('#saveFlightDetails').hide();
+
+    // Load flight details via AJAX
+    $.ajax({
+        url: '{{ route("admin.events.bay-management.flight-details", [$event, "__FLIGHT_ID__"]) }}'.replace('__FLIGHT_ID__', flightId),
+        method: 'GET',
+        data: { assignment_type: assignmentType },
+        success: function(response) {
+            $('#flightDetailsContent').html(response.html);
+            $('#saveFlightDetails').show();
+        },
+        error: function(xhr, status, error) {
+            $('#flightDetailsContent').html(`
+                <div class="alert alert-danger">
+                    <i class="fa fa-exclamation-triangle mr-2"></i>
+                    Error loading flight details. Please try again.
+                </div>
+            `);
+            console.error('Error loading flight details:', error);
+        }
+    });
+}
+
 // Display ad hoc flight edit form function (global scope)
 function displayAdhocFlightEditForm(flight) {
     const flightType = flight.dep == '{{ $event->dep }}' ? 'departure' : 'arrival';
@@ -1483,39 +1517,6 @@ $(document).ready(function() {
             lastClickedCell.focus().removeClass('last-clicked');
         }
     });
-
-    function loadFlightDetails(flightId, assignmentType) {
-        // Show modal with loading state
-        $('#flightDetailsModal').modal('show');
-        $('#flightDetailsContent').html(`
-            <div class="text-center">
-                <div class="spinner-border" role="status">
-                    <span class="sr-only">Loading...</span>
-                </div>
-            </div>
-        `);
-        $('#saveFlightDetails').hide();
-
-        // Load flight details via AJAX
-        $.ajax({
-            url: '{{ route("admin.events.bay-management.flight-details", [$event, "__FLIGHT_ID__"]) }}'.replace('__FLIGHT_ID__', flightId),
-            method: 'GET',
-            data: { assignment_type: assignmentType },
-            success: function(response) {
-                $('#flightDetailsContent').html(response.html);
-                $('#saveFlightDetails').show();
-            },
-            error: function(xhr, status, error) {
-                $('#flightDetailsContent').html(`
-                    <div class="alert alert-danger">
-                        <i class="fa fa-exclamation-triangle mr-2"></i>
-                        Error loading flight details. Please try again.
-                    </div>
-                `);
-                console.error('Error loading flight details:', error);
-            }
-        });
-    }
 
     function closeModal() {
         // Remove focus from any buttons and inputs before closing

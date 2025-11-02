@@ -769,6 +769,108 @@ function restoreOriginalModalFooter() {
         <button type="button" class="btn btn-primary" id="saveFlightDetails" style="display: none;">Save Changes</button>
     `;
     $('#flightDetailsModal .modal-footer').html(originalFooter);
+    // Re-attach event handlers after footer is restored
+    reattachModalFooterHandlers();
+}
+
+// Close modal function (global scope)
+function closeModal() {
+    // Remove focus from any buttons and inputs before closing
+    $('#flightDetailsModal').find('button, input, select, textarea').blur();
+
+    // Remove any active focus from the modal
+    $('#flightDetailsModal').find(':focus').blur();
+
+    // Close the modal properly
+    $('#flightDetailsModal').modal('hide');
+
+    // Ensure aria-hidden is set properly during the closing process
+    setTimeout(function() {
+        $('#flightDetailsModal').attr('aria-hidden', 'true');
+    }, 50);
+}
+
+// Save flight details function (global scope)
+function saveFlightDetails(forceSave = false) {
+    const form = $('#flightDetailsForm');
+    let formData = form.serialize();
+
+    // Add force_save parameter if this is a forced save
+    if (forceSave) {
+        formData += '&force_save=true';
+    }
+
+    // Show loading state
+    $('#saveFlightDetails').prop('disabled', true).html('<i class="fa fa-spinner fa-spin mr-1"></i> Saving...');
+
+    $.ajax({
+        url: form.attr('action'),
+        method: 'POST',
+        data: formData,
+        headers: {
+            'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+        },
+        success: function(response) {
+            if (response.overlap_detected && !forceSave) {
+                // Show browser confirmation dialog for overlap
+                const userConfirmed = confirm(response.overlap_message);
+
+                if (userConfirmed) {
+                    // User wants to proceed, save with force flag
+                    saveFlightDetails(true);
+                    return;
+                } else {
+                    // User cancelled, reset button state
+                    $('#saveFlightDetails').prop('disabled', false).html('Save Changes');
+                    return;
+                }
+            }
+
+            if (response.success) {
+                // Close modal immediately
+                closeModal();
+
+                // Show success message below breadcrumbs
+                showMessage('success', response.message || 'Flight details updated successfully!');
+
+                // Reload only the table/matrix
+                reloadBayMatrix();
+            } else {
+                // Show error message in the modal
+                showModalMessage('danger', response.message || 'Error saving flight details.');
+            }
+        },
+        error: function(xhr, status, error) {
+            const errorMsg = xhr.responseJSON?.message || 'Error saving flight details. Please try again.';
+            // Show error message in the modal
+            showModalMessage('danger', errorMsg);
+            console.error('Error saving flight details:', error);
+        },
+        complete: function() {
+            $('#saveFlightDetails').prop('disabled', false).html('Save Changes');
+        }
+    });
+}
+
+// Re-attach modal footer event handlers (global scope)
+function reattachModalFooterHandlers() {
+    // Remove any existing handlers to prevent duplicates
+    $('#closeModalBtn').off('click');
+    $('#modalCloseX').off('click');
+    $('#saveFlightDetails').off('click');
+    
+    // Re-attach handlers
+    $('#closeModalBtn').on('click', function() {
+        closeModal();
+    });
+    
+    $('#modalCloseX').on('click', function() {
+        closeModal();
+    });
+    
+    $('#saveFlightDetails').on('click', function() {
+        saveFlightDetails();
+    });
 }
 
 // Delete ad hoc flight function (global scope)
@@ -1041,6 +1143,9 @@ function loadFlightDetails(flightId, assignmentType) {
     `);
     $('#saveFlightDetails').hide();
 
+    // Ensure original footer is restored and handlers are attached
+    restoreOriginalModalFooter();
+
     // Load flight details via AJAX
     $.ajax({
         url: '{{ route("admin.events.bay-management.flight-details", [$event, "__FLIGHT_ID__"]) }}'.replace('__FLIGHT_ID__', flightId),
@@ -1049,6 +1154,8 @@ function loadFlightDetails(flightId, assignmentType) {
         success: function(response) {
             $('#flightDetailsContent').html(response.html);
             $('#saveFlightDetails').show();
+            // Re-attach handlers after content loads (in case footer was modified)
+            reattachModalFooterHandlers();
         },
         error: function(xhr, status, error) {
             $('#flightDetailsContent').html(`
@@ -1058,6 +1165,8 @@ function loadFlightDetails(flightId, assignmentType) {
                 </div>
             `);
             console.error('Error loading flight details:', error);
+            // Re-attach handlers even on error
+            reattachModalFooterHandlers();
         }
     });
 }
@@ -1373,10 +1482,8 @@ $(document).ready(function() {
     // Initialize warning banner
     initializeWarningBanner();
 
-    // Handle save button click
-    $('#saveFlightDetails').on('click', function() {
-        saveFlightDetails();
-    });
+    // Initialize modal footer handlers on page load
+    reattachModalFooterHandlers();
 
     // Initialize ad hoc flight modal handlers
     initializeAdhocFlightModal();
@@ -1487,16 +1594,6 @@ $(document).ready(function() {
         };
     }
 
-    // Handle close button click
-    $('#closeModalBtn').on('click', function() {
-        closeModal();
-    });
-
-    // Handle X button click
-    $('#modalCloseX').on('click', function() {
-        closeModal();
-    });
-
     // Handle ESC key press
     $(document).on('keydown', function(e) {
         if (e.key === 'Escape' && $('#flightDetailsModal').hasClass('show')) {
@@ -1517,83 +1614,6 @@ $(document).ready(function() {
             lastClickedCell.focus().removeClass('last-clicked');
         }
     });
-
-    function closeModal() {
-        // Remove focus from any buttons and inputs before closing
-        $('#flightDetailsModal').find('button, input, select, textarea').blur();
-
-        // Remove any active focus from the modal
-        $('#flightDetailsModal').find(':focus').blur();
-
-        // Close the modal properly
-        $('#flightDetailsModal').modal('hide');
-
-        // Ensure aria-hidden is set properly during the closing process
-        setTimeout(function() {
-            $('#flightDetailsModal').attr('aria-hidden', 'true');
-        }, 50);
-    }
-
-    function saveFlightDetails(forceSave = false) {
-        const form = $('#flightDetailsForm');
-        let formData = form.serialize();
-
-        // Add force_save parameter if this is a forced save
-        if (forceSave) {
-            formData += '&force_save=true';
-        }
-
-        // Show loading state
-        $('#saveFlightDetails').prop('disabled', true).html('<i class="fa fa-spinner fa-spin mr-1"></i> Saving...');
-
-        $.ajax({
-            url: form.attr('action'),
-            method: 'POST',
-            data: formData,
-            headers: {
-                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-            },
-            success: function(response) {
-                if (response.overlap_detected && !forceSave) {
-                    // Show browser confirmation dialog for overlap
-                    const userConfirmed = confirm(response.overlap_message);
-
-                    if (userConfirmed) {
-                        // User wants to proceed, save with force flag
-                        saveFlightDetails(true);
-                        return;
-                    } else {
-                        // User cancelled, reset button state
-                        $('#saveFlightDetails').prop('disabled', false).html('Save Changes');
-                        return;
-                    }
-                }
-
-                if (response.success) {
-                    // Close modal immediately
-                    closeModal();
-
-                    // Show success message below breadcrumbs
-                    showMessage('success', response.message || 'Flight details updated successfully!');
-
-                    // Reload only the table/matrix
-                    reloadBayMatrix();
-                } else {
-                    // Show error message in the modal
-                    showModalMessage('danger', response.message || 'Error saving flight details.');
-                }
-            },
-            error: function(xhr, status, error) {
-                const errorMsg = xhr.responseJSON?.message || 'Error saving flight details. Please try again.';
-                // Show error message in the modal
-                showModalMessage('danger', errorMsg);
-                console.error('Error saving flight details:', error);
-            },
-            complete: function() {
-                $('#saveFlightDetails').prop('disabled', false).html('Save Changes');
-            }
-        });
-    }
 
     function initializeBayBlocking() {
         // Load blocked bays when modal is shown

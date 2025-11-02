@@ -187,11 +187,23 @@
                                                 data-flight-id="{{ $assignment['flight']->id }}"
                                                 data-assignment-type="{{ $assignment['type'] }}"
                                                 data-aircraft-type="{{ $assignment['aircraft_type'] ?? 'Unknown' }}"
-                                                style="cursor: pointer;"
-                                                title="Click to view/edit flight details"
+                                                data-bay-id="{{ $bay->id }}"
+                                                data-time-slot="{{ $timeSlot->format('H:i') }}"
+                                                data-original-bay="{{ $bay->name }}"
+                                                @if($assignment['type'] === 'adhoc')
+                                                    data-callsign="{{ $assignment['flight']->callsign }}"
+                                                    data-ac-type="{{ $assignment['flight']->acType }}"
+                                                    data-dep="{{ $assignment['flight']->dep }}"
+                                                    data-arr="{{ $assignment['flight']->arr }}"
+                                                    data-std="{{ $assignment['flight']->std ? $assignment['flight']->std->format('Y-m-d H:i:s') : '' }}"
+                                                    data-sta="{{ $assignment['flight']->sta ? $assignment['flight']->sta->format('Y-m-d H:i:s') : '' }}"
+                                                @endif
+                                                style="cursor: grab;"
+                                                title="Drag to move flight or click to view/edit details"
                                                 tabindex="0"
                                                 role="button"
-                                                aria-label="View flight details for {{ $assignment['callsign'] }}">
+                                                aria-label="Drag to move or view flight details for {{ $assignment['callsign'] }}"
+                                                draggable="true">
 
                                                 <div class="text-center flight-details">
                                                     <div class="flight-callsign">{{ $assignment['callsign'] }}</div>
@@ -743,6 +755,102 @@
         filter: grayscale(0.8) !important;
         transition: opacity 0.3s ease, filter 0.3s ease;
     }
+
+    /* Drag and Drop Styles */
+    .flight-assignment-cell[draggable="true"] {
+        cursor: grab !important;
+    }
+
+    .flight-assignment-cell[draggable="true"]:active {
+        cursor: grabbing !important;
+    }
+
+    .flight-assignment-cell.dragging {
+        opacity: 0.5;
+        transform: scale(0.95);
+        background-color: rgba(0, 123, 255, 0.2) !important;
+        border: 2px dashed #007bff !important;
+        transition: all 0.2s ease;
+        position: relative;
+        z-index: 1;
+    }
+    
+    /* Make the content of dragging cell not block pointer events, but keep the cell itself draggable */
+    .flight-assignment-cell.dragging .flight-details {
+        pointer-events: none;
+    }
+
+    /* When dragging, make sure all time slot cells are fully visible and above the dragging element */
+    body.dragging .time-slot:not(.flight-assignment-cell),
+    body.dragging .time-slot.table-light {
+        position: relative;
+        z-index: 100;
+        pointer-events: auto !important;
+    }
+
+    .time-slot.drop-target {
+        background-color: rgba(40, 167, 69, 0.3) !important;
+        border: 2px dashed #28a745 !important;
+        transition: all 0.2s ease;
+        z-index: 1002 !important;
+    }
+
+    .time-slot.drop-target.blocked {
+        background-color: rgba(220, 53, 69, 0.3) !important;
+        border: 2px dashed #dc3545 !important;
+        z-index: 1002 !important;
+    }
+
+    .time-slot.drop-target.overlap {
+        background-color: rgba(255, 193, 7, 0.3) !important;
+        border: 2px dashed #ffc107 !important;
+        z-index: 1002 !important;
+    }
+
+    .time-slot.drag-over {
+        background-color: rgba(0, 123, 255, 0.2) !important;
+        border: 2px solid #007bff !important;
+        transition: all 0.2s ease;
+        z-index: 1002 !important;
+    }
+
+    /* Drag preview styling */
+    .drag-preview {
+        background-color: #fff;
+        border: 2px solid #007bff;
+        border-radius: 4px;
+        padding: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        font-size: 0.8rem;
+        max-width: 200px;
+    }
+
+    /* Loading state during drag operation */
+    .flight-assignment-cell.updating {
+        opacity: 0.7;
+        pointer-events: none;
+        background-color: #f8f9fa !important;
+        position: relative;
+    }
+
+    .flight-assignment-cell.updating::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 16px;
+        height: 16px;
+        border: 2px solid #007bff;
+        border-top: 2px solid transparent;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        0% { transform: translate(-50%, -50%) rotate(0deg); }
+        100% { transform: translate(-50%, -50%) rotate(360deg); }
+    }
 </style>
 @endpush
 
@@ -974,6 +1082,11 @@ function showMessage(type, message) {
 function initializeTableEventHandlers() {
     // Handle clicks on existing flight assignment cells
     $(document).off('click', '.flight-assignment-cell').on('click', '.flight-assignment-cell', function(e) {
+        // Ignore clicks if this cell is currently being dragged or was just dragged
+        if ($(this).hasClass('dragging') || $('body').hasClass('dragging')) {
+            return;
+        }
+        
         e.stopPropagation();
 
         // Focus tracking
@@ -1472,6 +1585,9 @@ $(document).ready(function() {
 
     // Initialize gate filter
     initializeGateFilter();
+
+    // Initialize drag and drop functionality
+    initializeDragAndDrop();
 
     // Initialize tooltips for gate overlap warnings
     initializeTooltips();
@@ -2257,6 +2373,625 @@ $(document).ready(function() {
 
         // Clear selected data
         window.selectedAdhocData = null;
+    }
+
+    // Drag and Drop functionality
+    function initializeDragAndDrop() {
+        let draggedElement = null;
+        let draggedData = null;
+        let originalPosition = null;
+
+        // Add mousedown handler for immediate visual feedback
+        $(document).on('mousedown', '.flight-assignment-cell[draggable="true"]', function(e) {
+            // Only for left mouse button
+            if (e.button === 0) {
+                $(this).css('cursor', 'grabbing');
+            }
+        });
+
+        // Remove grabbing cursor on mouseup
+        $(document).on('mouseup', '.flight-assignment-cell[draggable="true"]', function(e) {
+            $(this).css('cursor', 'grab');
+        });
+
+        // Handle drag start
+        $(document).on('dragstart', '.flight-assignment-cell[draggable="true"]', function(e) {
+            const $this = $(this);
+            draggedElement = this;
+            
+            // Cache jQuery selectors
+            const $flightCallsign = $this.find('.flight-callsign');
+            const $flightTime = $this.find('.flight-time');
+            
+            draggedData = {
+                flightId: $this.data('flight-id'),
+                assignmentType: $this.data('assignment-type'),
+                aircraftType: $this.data('aircraft-type'),
+                originalBayId: $this.data('bay-id'),
+                originalBayName: $this.data('original-bay'),
+                timeSlot: $this.data('time-slot'),
+                callsign: $flightCallsign.text().trim(),
+                // Get original assignment times from the flight details
+                originalTimeFrom: $flightTime.text().trim().split('-')[0],
+                originalTimeTo: $flightTime.text().trim().split('-')[1]
+            };
+            
+            // Add additional data for ad hoc flights
+            if ($this.data('assignment-type') === 'adhoc') {
+                draggedData.callsign = $this.data('callsign');
+                draggedData.aircraftType = $this.data('ac-type');
+                draggedData.dep = $this.data('dep');
+                draggedData.arr = $this.data('arr');
+                draggedData.std = $this.data('std');
+                draggedData.sta = $this.data('sta');
+            }
+            
+            originalPosition = {
+                row: $this.closest('tr'),
+                cell: $this
+            };
+
+            // Add dragging class to both the element and body immediately
+            $this.addClass('dragging');
+            $('body').addClass('dragging');
+            
+            // Store original colspan and split cell into individual columns
+            const originalColspan = $this.attr('colspan');
+            if (originalColspan && parseInt(originalColspan) > 1) {
+                const colspan = parseInt(originalColspan);
+                $this.data('original-colspan', originalColspan);
+                
+                // Store original HTML content
+                const originalContent = $this[0].innerHTML; // Use native innerHTML for speed
+                $this.data('original-content', originalContent);
+                
+                // Set colspan to 1 and add empty cells after it - optimized
+                $this.attr('colspan', '1');
+                
+                // Build all placeholder cells at once
+                const placeholders = [];
+                for (let i = 1; i < colspan; i++) {
+                    placeholders.push('<td class="time-slot table-light drag-placeholder" style="position: relative; z-index: 100;"></td>');
+                }
+                $this.after(placeholders.join(''));
+            }
+
+            // Create custom drag image - simplified
+            const dragPreview = document.createElement('div');
+            dragPreview.className = 'drag-preview';
+            dragPreview.innerHTML = `
+                <div style="font-weight: bold;">${draggedData.callsign}</div>
+                <div style="font-size: 0.7rem; color: #666;">${draggedData.aircraftType}</div>
+                <div style="font-size: 0.7rem; color: #666;">${draggedData.timeSlot}</div>
+            `;
+            
+            document.body.appendChild(dragPreview);
+            e.originalEvent.dataTransfer.setDragImage(dragPreview, 0, 0);
+            e.originalEvent.dataTransfer.effectAllowed = 'move';
+            e.originalEvent.dataTransfer.setData('text/plain', draggedData.flightId);
+
+            // Clean up drag preview after a short delay
+            setTimeout(() => dragPreview.remove(), 100);
+        });
+
+        // Handle drag end
+        $(document).on('dragend', '.flight-assignment-cell[draggable="true"]', function(e) {
+            $(this).removeClass('dragging');
+            $('body').removeClass('dragging');
+            $('.time-slot').removeClass('drag-over drop-target blocked overlap');
+            
+            // Restore original colspan and remove placeholder cells
+            if ($(this).data('original-colspan')) {
+                const originalColspan = $(this).data('original-colspan');
+                const originalContent = $(this).data('original-content');
+                
+                // Remove all placeholder cells that were added
+                $(this).nextAll('.drag-placeholder').remove();
+                
+                // Restore colspan and content
+                $(this).attr('colspan', originalColspan);
+                if (originalContent) {
+                    $(this).html(originalContent);
+                }
+                
+                // Clear data
+                $(this).removeData('original-colspan');
+                $(this).removeData('original-content');
+            }
+            
+            // Clear any pending drag over timeout
+            clearTimeout(dragOverTimeout);
+            
+            draggedElement = null;
+            draggedData = null;
+            originalPosition = null;
+        });
+
+        // Handle drag over - optimized for performance
+        let dragOverTimeout;
+        $(document).on('dragover', '.time-slot', function(e) {
+            e.preventDefault();
+            e.originalEvent.dataTransfer.dropEffect = 'move';
+            
+            if (!draggedData) return;
+
+            // For multi-column spans, we need to handle the case where the dragged element
+            // covers multiple cells but we want to allow dropping on individual cells
+            const $currentCell = $(this);
+            
+            // If this cell is part of a dragged multi-column span, we need special handling
+            if ($currentCell.hasClass('flight-assignment-cell') && 
+                $currentCell.data('flight-id') === draggedData.flightId &&
+                $currentCell.attr('colspan') && parseInt($currentCell.attr('colspan')) > 1) {
+                
+                // For multi-column spans being dragged, allow drops on individual time slots
+                // that would be covered by this span
+                const colspan = parseInt($currentCell.attr('colspan'));
+                const cellIndex = $currentCell.index() - 1; // Subtract 1 for bay column
+                
+                // Find the individual time slot cells that would be covered by this span
+                const $row = $currentCell.closest('tr');
+                const $timeSlotCells = $row.find('.time-slot:not(.flight-assignment-cell)');
+                
+                // Check if we're over one of the individual time slot cells that this span covers
+                let isOverCoveredCell = false;
+                for (let i = cellIndex; i < cellIndex + colspan && i < $timeSlotCells.length; i++) {
+                    if ($timeSlotCells.eq(i).is(e.target) || $timeSlotCells.eq(i).has(e.target).length > 0) {
+                        isOverCoveredCell = true;
+                        break;
+                    }
+                }
+                
+                if (isOverCoveredCell) {
+                    // Debounce the highlighting to improve performance
+                    clearTimeout(dragOverTimeout);
+                    dragOverTimeout = setTimeout(() => {
+                        highlightDropTarget($(this));
+                    }, 10);
+                }
+            } else {
+                // Normal drag over handling for non-spanning cells
+                clearTimeout(dragOverTimeout);
+                dragOverTimeout = setTimeout(() => {
+                    highlightDropTarget($(this));
+                }, 10); // Small delay to prevent excessive DOM manipulation
+            }
+        });
+
+        // Additional handler for empty time slot cells to ensure they can receive drops
+        // even when covered by multi-column spans
+        $(document).on('dragover', '.time-slot.table-light', function(e) {
+            e.preventDefault();
+            e.originalEvent.dataTransfer.dropEffect = 'move';
+            
+            if (!draggedData) return;
+
+            // Always allow drops on empty time slot cells
+            clearTimeout(dragOverTimeout);
+            dragOverTimeout = setTimeout(() => {
+                highlightDropTarget($(this));
+            }, 10);
+        });
+
+        function highlightDropTarget($cell) {
+            // Remove previous drag-over classes
+            $('.time-slot').removeClass('drag-over drop-target blocked overlap');
+
+            // Add drag-over class
+            $cell.addClass('drag-over');
+
+            // Check if this is a valid drop target
+            const targetBayId = $cell.closest('tr').data('bay-id');
+            const targetBayName = $cell.closest('tr').data('gate');
+
+            if (targetBayId && targetBayName) {
+                // Check for blocked bay
+                if ($cell.closest('tr').hasClass('bay-blocked-row')) {
+                    $cell.addClass('drop-target blocked');
+                    return;
+                }
+
+                // Check for existing flight in this cell or overlapping cells
+                const isOverlapping = checkForOverlap($cell, draggedData);
+                if (isOverlapping) {
+                    $cell.addClass('drop-target overlap');
+                    return;
+                }
+
+                // Valid drop target
+                $cell.addClass('drop-target');
+            }
+        }
+
+        function checkForOverlap($targetCell, draggedData) {
+            // Get the target bay and time info
+            const targetBayId = $targetCell.closest('tr').data('bay-id');
+            const targetTimeSlotIndex = $targetCell.index() - 1; // Subtract 1 for the bay column
+            
+            // Check if we're dropping on the same bay and overlapping time slots
+            if (targetBayId == draggedData.originalBayId) {
+                const originalTimeSlotIndex = getTimeSlotIndex(draggedData.timeSlot);
+                
+                // Check if the target is within the original flight's colspan range
+                const $originalCell = originalPosition.cell;
+                const colspan = parseInt($originalCell.attr('colspan')) || 1;
+                
+                // If target is within the original flight's time range, it's not an overlap
+                if (targetTimeSlotIndex >= originalTimeSlotIndex && 
+                    targetTimeSlotIndex < originalTimeSlotIndex + colspan) {
+                    return false;
+                }
+            }
+
+            // Check for existing flight in this specific cell
+            if ($targetCell.hasClass('flight-assignment-cell') && 
+                $targetCell.data('flight-id') !== draggedData.flightId) {
+                return true;
+            }
+
+            return false;
+        }
+
+        // Handle drag leave
+        $(document).on('dragleave', '.time-slot', function(e) {
+            // Only remove classes if we're actually leaving the element
+            if (!$(this).is(e.relatedTarget) && !$(this).has(e.relatedTarget).length) {
+                $(this).removeClass('drag-over drop-target blocked overlap');
+            }
+        });
+
+        // Handle drop
+        $(document).on('drop', '.time-slot', function(e) {
+            e.preventDefault();
+            
+            if (!draggedData) return;
+
+            const targetCell = $(this);
+            const targetRow = targetCell.closest('tr');
+            const targetBayId = targetRow.data('bay-id');
+            const targetBayName = targetRow.data('gate');
+            let targetTimeSlotIndex = targetCell.index() - 1; // Subtract 1 for the bay column
+
+            // Handle special case for multi-column spans
+            // If we're dropping on a cell that's part of a multi-column flight assignment,
+            // we need to find the actual time slot index
+            if (targetCell.hasClass('flight-assignment-cell') && 
+                targetCell.data('flight-id') === draggedData.flightId &&
+                targetCell.attr('colspan') && parseInt(targetCell.attr('colspan')) > 1) {
+                
+                // For multi-column spans, use the original time slot index
+                targetTimeSlotIndex = getTimeSlotIndex(draggedData.timeSlot);
+            }
+
+            // Remove drag classes
+            $('.time-slot').removeClass('drag-over drop-target blocked overlap');
+
+            // Validate drop target
+            if (!targetBayId || !targetBayName) {
+                showMessage('danger', 'Invalid drop target. Please drop on a valid bay time slot.');
+                return;
+            }
+
+            // Check if dropping on the same position
+            if (targetBayId == draggedData.originalBayId && 
+                targetTimeSlotIndex === getTimeSlotIndex(draggedData.timeSlot)) {
+                showMessage('info', 'Flight is already at this position.');
+                return;
+            }
+
+            // Check for blocked bay
+            if (targetRow.hasClass('bay-blocked-row')) {
+                showMessage('danger', 'Cannot assign flight to a blocked bay.');
+                return;
+            }
+
+            // Check for existing flight (overlap) - improved for colspan handling
+            const isOverlapping = checkForOverlap(targetCell, draggedData);
+            if (isOverlapping) {
+                // Find the existing flight's callsign
+                let existingCallsign = 'another flight';
+                if (targetCell.hasClass('flight-assignment-cell')) {
+                    existingCallsign = targetCell.find('.flight-callsign').text().trim();
+                } else {
+                    // Check if we're overlapping with the original position (same flight)
+                    if (targetBayId == draggedData.originalBayId && 
+                        targetTimeSlotIndex >= getTimeSlotIndex(draggedData.timeSlot)) {
+                        const $originalCell = originalPosition.cell;
+                        const colspan = parseInt($originalCell.attr('colspan')) || 1;
+                        const originalTimeSlotIndex = getTimeSlotIndex(draggedData.timeSlot);
+                        
+                        if (targetTimeSlotIndex < originalTimeSlotIndex + colspan) {
+                            // This is the same flight, no overlap
+                            isOverlapping = false;
+                        }
+                    }
+                }
+                
+                if (isOverlapping) {
+                    const confirmMessage = `This will create an overlap with ${existingCallsign}. Do you want to proceed?`;
+                    
+                    if (!confirm(confirmMessage)) {
+                        return;
+                    }
+                }
+            }
+
+            // Calculate new time based on target position
+            const newTime = calculateNewTimeFromSlot(targetTimeSlotIndex);
+            if (!newTime) {
+                showMessage('danger', 'Unable to calculate new time for this position.');
+                return;
+            }
+
+            // Show loading state
+            $(originalPosition.cell).addClass('updating');
+
+            // Perform the update
+            updateFlightAssignment(draggedData, targetBayId, targetBayName, newTime, targetCell);
+        });
+
+        // Helper function to get time slot index from time string
+        function getTimeSlotIndex(timeString) {
+            const timeSlots = $('.sticky-time-header').map(function() {
+                return $(this).text().trim();
+            }).get();
+            return timeSlots.indexOf(timeString);
+        }
+
+        // Helper function to calculate new time from slot index
+        function calculateNewTimeFromSlot(slotIndex) {
+            const timeSlots = $('.sticky-time-header').map(function() {
+                return $(this).text().trim();
+            }).get();
+            
+            if (slotIndex >= 0 && slotIndex < timeSlots.length) {
+                return timeSlots[slotIndex];
+            }
+            return null;
+        }
+
+        // Function to update flight assignment
+        function updateFlightAssignment(draggedData, newBayId, newBayName, newTime, targetCell) {
+            const eventId = '{{ $event->id }}';
+            const flightId = draggedData.flightId;
+            
+            // Determine assignment type and calculate new times
+            const assignmentType = draggedData.assignmentType;
+            const newStartTime = parseTimeToDateTime(newTime);
+            
+            let updateData = {};
+            
+            if (assignmentType === 'departure') {
+                // Drop time = bay booking start time, preserve original duration
+                const originalFrom = parseTimeToDateTime(draggedData.originalTimeFrom);
+                const originalTo = parseTimeToDateTime(draggedData.originalTimeTo);
+                const durationMinutes = (originalTo.getTime() - originalFrom.getTime()) / (1000 * 60);
+                const bayBookingEnd = newStartTime.addMinutes(durationMinutes);
+                
+                updateData = {
+                    dep_bay: newBayId,
+                    dep_bay_assigned_from: newStartTime.format('Y-m-d H:i:s'),  // Drop time = bay booking start
+                    dep_bay_assigned_to: bayBookingEnd.format('Y-m-d H:i:s')    // End time = start + duration
+                };
+            } else if (assignmentType === 'arrival') {
+                // Drop time = bay booking start time, preserve original duration
+                const originalFrom = parseTimeToDateTime(draggedData.originalTimeFrom);
+                const originalTo = parseTimeToDateTime(draggedData.originalTimeTo);
+                const durationMinutes = (originalTo.getTime() - originalFrom.getTime()) / (1000 * 60);
+                const bayBookingEnd = newStartTime.addMinutes(durationMinutes);
+                
+                updateData = {
+                    arr_bay: newBayId,
+                    arr_bay_assigned_from: newStartTime.format('Y-m-d H:i:s'),  // Drop time = bay booking start
+                    arr_bay_assigned_to: bayBookingEnd.format('Y-m-d H:i:s')    // End time = start + duration
+                };
+            } else if (assignmentType === 'adhoc') {
+                // Handle ad hoc flights differently
+                updateAdhocFlightAssignment(draggedData, newBayId, newBayName, newTime, targetCell);
+                return;
+            }
+
+            // Make AJAX request to update flight
+            $.ajax({
+                url: `{{ route('admin.events.bay-management.update-flight-assignment', ['event' => $event, 'flight' => '__FLIGHT_ID__']) }}`.replace('__FLIGHT_ID__', flightId),
+                method: 'POST',
+                data: {
+                    ...updateData,
+                    assignment_type: assignmentType,
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        showMessage('success', `Flight ${draggedData.callsign} moved to ${newBayName} at ${newTime}`);
+                        reloadBayMatrix();
+                    } else if (response.overlap_detected) {
+                        const userConfirmed = confirm(response.overlap_message);
+                        if (userConfirmed) {
+                            // Retry with force save
+                            $.ajax({
+                                url: `{{ route('admin.events.bay-management.update-flight-assignment', ['event' => $event, 'flight' => '__FLIGHT_ID__']) }}`.replace('__FLIGHT_ID__', flightId),
+                                method: 'POST',
+                                data: {
+                                    ...updateData,
+                                    assignment_type: assignmentType,
+                                    force_save: true,
+                                    _token: '{{ csrf_token() }}'
+                                },
+                                success: function(response) {
+                                    if (response.success) {
+                                        showMessage('success', `Flight ${draggedData.callsign} moved to ${newBayName} at ${newTime}`);
+                                        reloadBayMatrix();
+                                    } else {
+                                        showMessage('danger', response.message || 'Error moving flight.');
+                                        if (originalPosition && originalPosition.cell) {
+                                            $(originalPosition.cell).removeClass('updating');
+                                        }
+                                    }
+                                },
+                                error: function(xhr) {
+                                    showMessage('danger', 'Error moving flight. Please try again.');
+                                    if (originalPosition && originalPosition.cell) {
+                                        $(originalPosition.cell).removeClass('updating');
+                                    }
+                                }
+                            });
+                        } else {
+                            if (originalPosition && originalPosition.cell) {
+                                $(originalPosition.cell).removeClass('updating');
+                            }
+                        }
+                    } else {
+                        showMessage('danger', response.message || 'Error moving flight.');
+                        if (originalPosition && originalPosition.cell) {
+                            $(originalPosition.cell).removeClass('updating');
+                        }
+                    }
+                },
+                error: function(xhr) {
+                    showMessage('danger', 'Error moving flight. Please try again.');
+                    if (originalPosition && originalPosition.cell) {
+                        $(originalPosition.cell).removeClass('updating');
+                    }
+                }
+            });
+        }
+
+        // Function to update ad hoc flight assignment
+        function updateAdhocFlightAssignment(draggedData, newBayId, newBayName, newTime, targetCell) {
+            const newStartTime = parseTimeToDateTime(newTime);
+            
+            // For ad hoc flights: preserve original duration, drop time = bay booking start time
+            const originalFrom = parseTimeToDateTime(draggedData.originalTimeFrom);
+            const originalTo = parseTimeToDateTime(draggedData.originalTimeTo);
+            const durationMinutes = (originalTo.getTime() - originalFrom.getTime()) / (1000 * 60);
+            
+            // Apply the same duration to the new start time
+            const newEndTime = newStartTime.addMinutes(durationMinutes);
+            
+            const updateData = {
+                flight_id: draggedData.flightId,
+                callsign: draggedData.callsign,
+                acType: draggedData.aircraftType,
+                dep: draggedData.dep || null,
+                arr: draggedData.arr || null,
+                std: draggedData.std || null,
+                sta: draggedData.sta || null,
+                bay_id: newBayId,
+                bay_assigned_from: newStartTime.format('Y-m-d H:i:s'),  // Drop time = bay booking start
+                bay_assigned_to: newEndTime.format('Y-m-d H:i:s'),      // End time = start + duration
+                _token: '{{ csrf_token() }}'
+            };
+
+            $.ajax({
+                url: '{{ route("admin.events.bay-management.update-adhoc-flight", $event) }}',
+                method: 'PUT',
+                data: updateData,
+                success: function(response) {
+                    if (response.success) {
+                        showMessage('success', `Ad hoc flight ${draggedData.callsign} moved to ${newBayName} at ${newStartTime.format('H:i')}`);
+                        reloadBayMatrix();
+                    } else if (response.overlap_detected) {
+                        const userConfirmed = confirm(response.overlap_message);
+                        if (userConfirmed) {
+                            updateData.force_save = true;
+                            $.ajax({
+                                url: '{{ route("admin.events.bay-management.update-adhoc-flight", $event) }}',
+                                method: 'PUT',
+                                data: updateData,
+                                success: function(response) {
+                                    if (response.success) {
+                                        showMessage('success', `Ad hoc flight ${draggedData.callsign} moved to ${newBayName} at ${newStartTime.format('H:i')}`);
+                                        reloadBayMatrix();
+                                    } else {
+                                        showMessage('danger', response.message || 'Error moving ad hoc flight.');
+                                        $(originalPosition.cell).removeClass('updating');
+                                    }
+                                },
+                                error: function(xhr) {
+                                    showMessage('danger', 'Error moving ad hoc flight. Please try again.');
+                                    if (originalPosition && originalPosition.cell) {
+                                        $(originalPosition.cell).removeClass('updating');
+                                    }
+                                }
+                            });
+                        } else {
+                            if (originalPosition && originalPosition.cell) {
+                                $(originalPosition.cell).removeClass('updating');
+                            }
+                        }
+                    } else {
+                        showMessage('danger', response.message || 'Error moving ad hoc flight.');
+                        if (originalPosition && originalPosition.cell) {
+                            $(originalPosition.cell).removeClass('updating');
+                        }
+                    }
+                },
+                error: function(xhr) {
+                    showMessage('danger', 'Error moving ad hoc flight. Please try again.');
+                    if (originalPosition && originalPosition.cell) {
+                        $(originalPosition.cell).removeClass('updating');
+                    }
+                }
+            });
+        }
+
+        // Helper function to parse time string to Date object
+        function parseTimeToDateTime(timeString) {
+            try {
+                const eventDate = '{{ $event->startEvent->format("Y-m-d") }}';
+                const dateTimeString = eventDate + 'T' + timeString + ':00';
+                const date = new Date(dateTimeString);
+                
+                // Validate the date
+                if (isNaN(date.getTime())) {
+                    console.error('Invalid date created from:', dateTimeString);
+                    throw new Error('Invalid date');
+                }
+                
+                // Add helper methods to mimic Carbon-like behavior
+                date.subMinutes = function(minutes) {
+                    const newDate = new Date(this.getTime());
+                    newDate.setMinutes(newDate.getMinutes() - minutes);
+                    // Add helper methods to the new date
+                    newDate.subMinutes = date.subMinutes;
+                    newDate.addMinutes = date.addMinutes;
+                    newDate.format = date.format;
+                    return newDate;
+                };
+                
+                date.addMinutes = function(minutes) {
+                    const newDate = new Date(this.getTime());
+                    newDate.setMinutes(newDate.getMinutes() + minutes);
+                    // Add helper methods to the new date
+                    newDate.subMinutes = date.subMinutes;
+                    newDate.addMinutes = date.addMinutes;
+                    newDate.format = date.format;
+                    return newDate;
+                };
+                
+                date.format = function(format) {
+                    if (format === 'Y-m-d H:i:s') {
+                        const year = this.getFullYear();
+                        const month = String(this.getMonth() + 1).padStart(2, '0');
+                        const day = String(this.getDate()).padStart(2, '0');
+                        const hours = String(this.getHours()).padStart(2, '0');
+                        const minutes = String(this.getMinutes()).padStart(2, '0');
+                        const seconds = String(this.getSeconds()).padStart(2, '0');
+                        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+                    } else if (format === 'H:i') {
+                        const hours = String(this.getHours()).padStart(2, '0');
+                        const minutes = String(this.getMinutes()).padStart(2, '0');
+                        return `${hours}:${minutes}`;
+                    }
+                    return this.toISOString();
+                };
+                
+                return date;
+            } catch (error) {
+                console.error('Error parsing time:', timeString, error);
+                throw error;
+            }
+        }
     }
 });
 </script>

@@ -1047,7 +1047,7 @@ class BayManagementController extends Controller
         try {
             // Find the ad hoc flight
             $adhocFlight = AdhocFlight::where('event_id', $event->id)
-                ->where('callsign', $request->callsign)
+                ->where('id', $request->flight_id)
                 ->first();
 
             if (!$adhocFlight) {
@@ -1214,5 +1214,81 @@ class BayManagementController extends Controller
         $overlappingText = implode(', ', $overlappingDetails);
 
         return "Bay {$bayName} {$flightType} assignment ({$newFromTime}-{$newToTime}) overlaps with existing booking(s): {$overlappingText}. Do you want to proceed anyway?";
+    }
+
+    /**
+     * Update flight assignment via drag and drop
+     */
+    public function updateFlightAssignment(Event $event, Flight $flight, Request $request): JsonResponse
+    {
+        // Ensure this is a Real Flight Ops event
+        if ($event->event_type_id !== EventType::REALFLIGHTOPS->value) {
+            return response()->json(['error' => 'Bay management is only available for Real Flight Ops events.'], 403);
+        }
+
+        // Verify the flight belongs to this event
+        if ($flight->booking->event_id !== $event->id) {
+            return response()->json(['error' => 'Flight not found for this event.'], 404);
+        }
+
+        $assignmentType = $request->get('assignment_type', 'departure');
+
+        if ($assignmentType === 'departure') {
+            $rules = [
+                'dep_bay' => 'nullable|exists:bays,id',
+                'dep_bay_assigned_from' => 'nullable|date',
+                'dep_bay_assigned_to' => 'nullable|date|after:dep_bay_assigned_from',
+            ];
+
+            $data = [
+                'dep_bay' => $request->get('dep_bay') ?: null,
+                'dep_bay_assigned_from' => $request->get('dep_bay_assigned_from') ?
+                    Carbon::parse($request->get('dep_bay_assigned_from')) : null,
+                'dep_bay_assigned_to' => $request->get('dep_bay_assigned_to') ?
+                    Carbon::parse($request->get('dep_bay_assigned_to')) : null,
+            ];
+        } else {
+            $rules = [
+                'arr_bay' => 'nullable|exists:bays,id',
+                'arr_bay_assigned_from' => 'nullable|date',
+                'arr_bay_assigned_to' => 'nullable|date|after:arr_bay_assigned_from',
+            ];
+
+            $data = [
+                'arr_bay' => $request->get('arr_bay') ?: null,
+                'arr_bay_assigned_from' => $request->get('arr_bay_assigned_from') ?
+                    Carbon::parse($request->get('arr_bay_assigned_from')) : null,
+                'arr_bay_assigned_to' => $request->get('arr_bay_assigned_to') ?
+                    Carbon::parse($request->get('arr_bay_assigned_to')) : null,
+            ];
+        }
+
+        $request->validate($rules);
+
+        try {
+            // Check for overlapping bookings
+            $overlapWarning = $this->checkForOverlappingBookings($flight, $assignmentType, $data, $event);
+
+            if ($overlapWarning && !$request->get('force_save', false)) {
+                return response()->json([
+                    'overlap_detected' => true,
+                    'overlap_message' => $overlapWarning,
+                    'data' => $data
+                ]);
+            }
+
+            // Update the flight
+            $flight->update($data);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Flight assignment updated successfully!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error updating flight assignment: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }

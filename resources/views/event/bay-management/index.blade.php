@@ -473,7 +473,7 @@
     .gate-table td:first-child {
         position: sticky;
         left: 0;
-        z-index: 10;
+        z-index: 205;
         min-width: 80px;
     }
 
@@ -496,7 +496,7 @@
 
     /* Ensure the sticky gate cell always stays on top */
     .sticky-gate-cell {
-        z-index: 12 !important;
+        z-index: 205 !important;
         position: sticky;
         left: 0;
     }
@@ -504,7 +504,7 @@
     .gate-table th {
         position: sticky;
         top: 0;
-        z-index: 5;
+        z-index: 200;
         white-space: nowrap;
         text-align: center;
         font-size: 0.75rem;
@@ -512,7 +512,7 @@
     }
 
     .gate-table th:first-child {
-        z-index: 13;
+        z-index: 210;
     }
 
     .gate-table td {
@@ -759,10 +759,27 @@
     /* Drag and Drop Styles */
     .flight-assignment-cell[draggable="true"] {
         cursor: grab !important;
+        -webkit-user-drag: element;
+        position: relative;
     }
 
     .flight-assignment-cell[draggable="true"]:active {
         cursor: grabbing !important;
+    }
+
+    /* Make the cell content non-selectable to avoid interference with drag */
+    .flight-assignment-cell[draggable="true"] {
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+    }
+    
+    /* Ensure child elements don't interfere with dragging - pointer-events set via JS */
+    .flight-assignment-cell[draggable="true"] * {
+        -webkit-user-drag: none !important;
+        -moz-user-drag: none !important;
+        user-drag: none !important;
     }
 
     .flight-assignment-cell.dragging {
@@ -1083,7 +1100,7 @@ function initializeTableEventHandlers() {
     // Handle clicks on existing flight assignment cells
     $(document).off('click', '.flight-assignment-cell').on('click', '.flight-assignment-cell', function(e) {
         // Ignore clicks if this cell is currently being dragged or was just dragged
-        if ($(this).hasClass('dragging') || $('body').hasClass('dragging')) {
+        if ($(this).hasClass('dragging') || $('body').hasClass('dragging') || $('body').attr('data-just-dragged') === 'true') {
             return;
         }
         
@@ -2375,23 +2392,310 @@ $(document).ready(function() {
         window.selectedAdhocData = null;
     }
 
-    // Drag and Drop functionality
+    // Drag and Drop functionality - Custom implementation
     function initializeDragAndDrop() {
         let draggedElement = null;
         let draggedData = null;
         let originalPosition = null;
+        let isDragging = false;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let dragThreshold = 5; // pixels to move before drag starts
+        let clickDetected = false;
+        let justFinishedDragging = false;
 
-        // Add mousedown handler for immediate visual feedback
-        $(document).on('mousedown', '.flight-assignment-cell[draggable="true"]', function(e) {
-            // Only for left mouse button
-            if (e.button === 0) {
-                $(this).css('cursor', 'grabbing');
+        // Function to make child elements non-draggable
+        function makeChildrenNonDraggable() {
+            $('.flight-assignment-cell[draggable="true"]').each(function() {
+                // Set draggable=false on all children and make them not interfere
+                $(this).find('*').attr('draggable', 'false').css({
+                    'pointer-events': 'none',
+                    '-webkit-user-drag': 'none'
+                });
+            });
+        }
+
+        // Initial setup
+        makeChildrenNonDraggable();
+
+        // Re-apply after any DOM mutations
+        const observer = new MutationObserver(function(mutations) {
+            let shouldUpdate = false;
+            mutations.forEach(function(mutation) {
+                if (mutation.addedNodes.length > 0) {
+                    shouldUpdate = true;
+                }
+            });
+            if (shouldUpdate) {
+                setTimeout(makeChildrenNonDraggable, 10);
             }
         });
 
-        // Remove grabbing cursor on mouseup
-        $(document).on('mouseup', '.flight-assignment-cell[draggable="true"]', function(e) {
-            $(this).css('cursor', 'grab');
+        // Observe the table for changes
+        const tableContainer = document.querySelector('.table-responsive');
+        if (tableContainer) {
+            observer.observe(tableContainer, {
+                childList: true,
+                subtree: true
+            });
+        }
+
+        // Handle mousedown - start potential drag
+        $(document).on('mousedown', '.flight-assignment-cell[draggable="true"]', function(e) {
+            // Only for left mouse button
+            if (e.button !== 0) return;
+            
+            const $cell = $(this);
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+            draggedElement = this;
+            clickDetected = true;
+            
+            $cell.css('cursor', 'grabbing');
+            
+            // Prepare drag data but don't start dragging yet
+            const $flightCallsign = $cell.find('.flight-callsign');
+            const $flightTime = $cell.find('.flight-time');
+            
+            draggedData = {
+                flightId: $cell.data('flight-id'),
+                assignmentType: $cell.data('assignment-type'),
+                aircraftType: $cell.data('aircraft-type'),
+                originalBayId: $cell.data('bay-id'),
+                originalBayName: $cell.data('original-bay'),
+                timeSlot: $cell.data('time-slot'),
+                callsign: $flightCallsign.text().trim(),
+                originalTimeFrom: $flightTime.text().trim().split('-')[0],
+                originalTimeTo: $flightTime.text().trim().split('-')[1]
+            };
+            
+            // Add additional data for ad hoc flights
+            if ($cell.data('assignment-type') === 'adhoc') {
+                draggedData.callsign = $cell.data('callsign');
+                draggedData.aircraftType = $cell.data('ac-type');
+                draggedData.dep = $cell.data('dep');
+                draggedData.arr = $cell.data('arr');
+                draggedData.std = $cell.data('std');
+                draggedData.sta = $cell.data('sta');
+            }
+            
+            originalPosition = {
+                row: $cell.closest('tr'),
+                cell: $cell
+            };
+            
+            e.preventDefault();
+        });
+
+        // Handle mousemove - detect drag intent
+        $(document).on('mousemove', function(e) {
+            if (!draggedElement || isDragging) return;
+            if (!clickDetected) return;
+            
+            // Calculate distance moved
+            const deltaX = Math.abs(e.clientX - dragStartX);
+            const deltaY = Math.abs(e.clientY - dragStartY);
+            
+            // If moved beyond threshold, start dragging
+            if (deltaX > dragThreshold || deltaY > dragThreshold) {
+                clickDetected = false; // Not a click anymore
+                startDrag(e);
+            }
+        });
+
+        function startDrag(e) {
+            if (isDragging) return;
+            isDragging = true;
+            
+            const $cell = $(draggedElement);
+            
+            // Add dragging class
+            $cell.addClass('dragging');
+            $('body').addClass('dragging');
+            
+            // Store original colspan and split cell into individual columns
+            const originalColspan = $cell.attr('colspan');
+            if (originalColspan && parseInt(originalColspan) > 1) {
+                const colspan = parseInt(originalColspan);
+                $cell.data('original-colspan', originalColspan);
+                
+                // Store original HTML content
+                const originalContent = $cell[0].innerHTML;
+                $cell.data('original-content', originalContent);
+                
+                // Set colspan to 1 and add empty cells after it
+                $cell.attr('colspan', '1');
+                
+                // Build all placeholder cells at once
+                const placeholders = [];
+                for (let i = 1; i < colspan; i++) {
+                    placeholders.push('<td class="time-slot table-light drag-placeholder" style="position: relative; z-index: 100;"></td>');
+                }
+                $cell.after(placeholders.join(''));
+                
+                // Re-apply pointer-events to new cells
+                makeChildrenNonDraggable();
+            }
+            
+            // Trigger custom dragstart event
+            $cell.trigger('customdragstart');
+        }
+
+        // Handle mouseup - end drag or detect click
+        $(document).on('mouseup', function(e) {
+            const $cell = $(draggedElement);
+            
+            if (isDragging) {
+                // End drag
+                endDrag(e);
+                
+                // Set a flag to prevent click handler from firing immediately after drag
+                justFinishedDragging = true;
+                $('body').attr('data-just-dragged', 'true');
+                
+                // Clear the flag after a short delay
+                setTimeout(() => {
+                    justFinishedDragging = false;
+                    $('body').removeAttr('data-just-dragged');
+                }, 100);
+            } else if (clickDetected && draggedElement) {
+                // This was a click, not a drag
+                $cell.css('cursor', 'grab');
+                // Let the click event handler deal with it
+            }
+            
+            // Reset
+            draggedElement = null;
+            draggedData = null;
+            clickDetected = false;
+            isDragging = false;
+        });
+
+        function endDrag(e) {
+            const $cell = $(draggedElement);
+            
+            // Find the drop target - element under mouse
+            const elementUnderMouse = document.elementFromPoint(e.clientX, e.clientY);
+            const $dropTarget = $(elementUnderMouse).closest('.time-slot');
+            
+            const draggedRow = $cell.closest('tr');
+            const dropTargetRow = $dropTarget.closest('tr');
+            const isSameRow = draggedRow[0] === dropTargetRow[0];
+            
+            // Calculate drop information BEFORE cleanup (in case we're dropping on a placeholder that will be removed)
+            let dropInfo = null;
+            let shouldHandleDrop = false;
+            
+            // Don't drop on the dragging cell itself
+            if ($dropTarget[0] === draggedElement) {
+                // Dropped on self, ignore
+            } else if ($dropTarget.length && $dropTarget.hasClass('drop-target') && !$dropTarget.hasClass('blocked') && !$dropTarget.hasClass('overlap')) {
+                // Valid drop target - calculate info now before cleanup
+                shouldHandleDrop = true;
+                
+                const targetBayId = $dropTarget.closest('tr').data('bay-id');
+                const targetBayName = $dropTarget.closest('tr').data('gate');
+                
+                // Calculate the actual column index accounting for colspans
+                let targetTimeSlotIndex = 0;
+                const $row = $dropTarget.closest('tr');
+                const $cells = $row.children('td');
+                
+                // Count columns up to target cell, accounting for colspans
+                for (let i = 0; i < $cells.length; i++) {
+                    const $currentCell = $cells.eq(i);
+                    const colspan = parseInt($currentCell.attr('colspan')) || 1;
+                    
+                    if ($currentCell[0] === $dropTarget[0]) {
+                        // Found our target cell, stop counting
+                        break;
+                    }
+                    // Add colspan value (or 1 if no colspan)
+                    targetTimeSlotIndex += colspan;
+                }
+                
+                // Get the time slot from the header
+                const $headers = $('.gate-table thead th');
+                const targetTimeSlot = $headers.eq(targetTimeSlotIndex).text().trim();
+                
+                // Store the drop info
+                dropInfo = {
+                    bayId: targetBayId,
+                    bayName: targetBayName,
+                    timeSlot: targetTimeSlot
+                };
+            }
+            
+            // Always clean up visual state
+            $cell.removeClass('dragging');
+            $('body').removeClass('dragging');
+            $('.time-slot').removeClass('drag-over drop-target blocked overlap');
+            $cell.css('cursor', 'grab');
+            
+            // Always restore original colspan and remove placeholder cells
+            if ($cell.data('original-colspan')) {
+                const originalColspan = $cell.data('original-colspan');
+                const originalContent = $cell.data('original-content');
+                
+                // Remove all placeholder cells that were added
+                $cell.nextAll('.drag-placeholder').remove();
+                
+                // Restore colspan and content
+                $cell.attr('colspan', originalColspan);
+                if (originalContent) {
+                    $cell.html(originalContent);
+                }
+                
+                // Re-apply pointer-events
+                makeChildrenNonDraggable();
+                
+                // Clear data
+                $cell.removeData('original-colspan');
+                $cell.removeData('original-content');
+            }
+            
+            // Trigger custom dragend event
+            $cell.trigger('customdragend');
+            
+            // Now handle the drop if valid (after cleanup so UI is restored)
+            if (shouldHandleDrop && dropInfo) {
+                handleDropWithInfo(dropInfo);
+            }
+        }
+        
+        function handleDropWithInfo(dropInfo) {
+            if (!draggedData) return;
+            
+            const targetBayId = dropInfo.bayId;
+            const targetBayName = dropInfo.bayName;
+            const targetTimeSlot = dropInfo.timeSlot;
+            
+            if (!targetBayId || !targetBayName || !targetTimeSlot) {
+                console.error('Invalid drop target', {targetBayId, targetBayName, targetTimeSlot});
+                return;
+            }
+            
+            // Check if we're dropping on the same position
+            if (targetBayId == draggedData.originalBayId && targetTimeSlot === draggedData.originalTimeFrom) {
+                return;
+            }
+            
+            // Use the existing updateFlightAssignment function
+            // Pass null for targetCell since we don't have it anymore (it was a placeholder)
+            updateFlightAssignment(draggedData, targetBayId, targetBayName, targetTimeSlot, null);
+        }
+
+        // Maintain hover effects during custom drag
+        $(document).on('mousemove', function(e) {
+            if (!isDragging) return;
+            
+            // Find the element under the mouse
+            const $target = $(document.elementFromPoint(e.clientX, e.clientY));
+            const $timeSlot = $target.closest('.time-slot');
+            
+            if ($timeSlot.length) {
+                highlightDropTarget($timeSlot);
+            }
         });
 
         // Handle drag start

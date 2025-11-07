@@ -58,7 +58,7 @@ class BookingController extends Controller
                     flashMessage(
                         'danger',
                         __('Warning'),
-                        __('Whoops! Somebody else reserved that slot just before you! Please choose another one. The slot will become available if it isn\'t confirmed within 10 minutes.')
+                        __('Whoops! Somebody else reserved that slot just before you! Please choose another one. The slot will become available if it is not confirmed within 10 minutes.')
                     );
                     return to_route('bookings.event.index', $booking->event);
                 } // In case the booking has already been booked

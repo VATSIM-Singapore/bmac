@@ -53,5 +53,5 @@ Please review the changes below:
 
 @lang('Regards'),
 
-**{{ config('mail.from.name', config('app.name')) }}**
+**The SINvACC Team**
 @endcomponent

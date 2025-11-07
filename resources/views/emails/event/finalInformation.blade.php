@@ -58,5 +58,5 @@ We look forward to seeing you in the virtual skies.
 
 @lang('Regards'),
 
-**{{ config('mail.from.name', config('app.name')) }}**
+**The SINvACC Team**
 @endcomponent

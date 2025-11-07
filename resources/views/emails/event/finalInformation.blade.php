@@ -3,7 +3,7 @@
 
 Dear **{{ $booking->user->full_name }}**,
 
-Thanks for booking a slot for the {{ $booking->event->name }} event. Here you can find your slot information:
+Thanks for booking a slot for {{ $booking->event->name }}. Here you can find your slot information:
 
 @component('mail::table')
 |  |  |

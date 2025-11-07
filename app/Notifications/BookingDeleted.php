@@ -48,7 +48,7 @@ class BookingDeleted extends Notification implements ShouldQueue
             ->subject($subject)
             ->greeting('Booking deleted')
             ->line('Dear ' . $notifiable->full_name . ',')
-            ->line('Your booking for ' . $event->name . ' event has been removed by an administrator.')
+            ->line('Your booking for ' . $event->name . ' has been removed by an administrator.')
             ->line('As long as the bookings remain open (' . $event->endBooking->format('d-m-Y H:i') . 'z), you can still create a new booking.')
             ->action('Book new flight', route('bookings.event.index', $event));
     }

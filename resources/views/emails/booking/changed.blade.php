@@ -3,7 +3,11 @@
 
 Dear **{{ $booking->user->full_name }}**,
 
-Your booking for the **{{ $booking->event->name }}** event has been amended, please review the changes below:
+Your booking for **{{ $booking->event->name }}** has been amended.
+
+Questions? Ask us on the SINvACC Discord Server, or email us <a href="mailto:realops@sinvacc.org">realops@sinvacc.org</a>
+
+Please review the changes below:
 
 @component('mail::table')
 |  |  |  |

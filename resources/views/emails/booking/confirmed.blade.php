@@ -3,7 +3,13 @@
 
 Dear **{{ $booking->user->full_name }}**,
 
-Thank you for your recent booking for **{{ $booking->event->name }}** event.
+Thank you for your recent booking for **{{ $booking->event->name }}**.
+
+Find pilot briefings & charts for Singapore Changi Airport <a href="https://drive.google.com/drive/folders/1_r5dJTcfomUQDUSAG-TNN_CunZpdnJnq">here</a>!
+Looking for sceneries? Find them <a href="https://drive.google.com/drive/folders/1_r5dJTcfomUQDUSAG-TNN_CunZpdnJnq">here</a>!
+
+Questions? Ask us on the SINvACC Discord Server, or email us <a href="mailto:realops@sinvacc.org">realops@sinvacc.org</a>
+
 For reference, your booking details are listed below.
 
 @component('mail::table')

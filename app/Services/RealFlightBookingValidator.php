@@ -102,54 +102,51 @@ class RealFlightBookingValidator
     }
 
     /**
-     * Validate time separation (30 minutes minimum between connected flights)
-     * Only validates when flights are logically connected (share a common airport)
+     * Validate time separation (20 minutes minimum between any two flights)
+     * Simple rule: Any two flights must have at least 20 minutes gap between them
      */
     private function validateTimeSeparation(Flight $newFlight, Collection $existingBookings): ValidationResult
     {
+        // Ensure new flight has required time fields
+        if (!$newFlight->ctot || !$newFlight->eta) {
+            return ValidationResult::success();
+        }
+
         foreach ($existingBookings as $existingBooking) {
             $existingFlight = $existingBooking->flights->first();
-            if (!$existingFlight) {
+            if (!$existingFlight || !$existingFlight->ctot || !$existingFlight->eta) {
                 continue;
             }
 
-            // Case 1: Existing flight arrives at airport, new flight departs from same airport
-            // Check: existing arrives at X, new departs from X
-            if ($existingFlight->arr == $newFlight->dep && $existingFlight->eta && $newFlight->ctot) {
-                if ($newFlight->ctot <= $existingFlight->eta) {
-                    return ValidationResult::error(
-                        "Your departure time ({$newFlight->formatted_ctot}) must be after your arrival time ({$existingFlight->formatted_eta})."
-                    );
-                }
+            // Determine which flight is earlier and which is later
+            $earlierFlight = null;
+            $laterFlight = null;
 
-                $timeDiff = $newFlight->ctot->diffInMinutes($existingFlight->eta);
-                if ($timeDiff < 30) {
-                    return ValidationResult::error(
-                        "Your flights must be separated by at least 30 minutes. " .
-                        "Your arrival at {$existingFlight->formatted_eta} is too close to your departure at {$newFlight->formatted_ctot} (only {$timeDiff} minutes apart)."
-                    );
-                }
+            if ($existingFlight->ctot < $newFlight->ctot) {
+                $earlierFlight = $existingFlight;
+                $laterFlight = $newFlight;
+            } else {
+                $earlierFlight = $newFlight;
+                $laterFlight = $existingFlight;
             }
 
-            // Case 2: New flight arrives at airport, existing flight departs from same airport
-            // Check: new arrives at X, existing departs from X
-            if ($newFlight->arr == $existingFlight->dep && $newFlight->eta && $existingFlight->ctot) {
-                if ($existingFlight->ctot <= $newFlight->eta) {
-                    return ValidationResult::error(
-                        "Your departure time ({$existingFlight->formatted_ctot}) must be after your arrival time ({$newFlight->formatted_eta})."
-                    );
-                }
-
-                $timeDiff = $existingFlight->ctot->diffInMinutes($newFlight->eta);
-                if ($timeDiff < 30) {
-                    return ValidationResult::error(
-                        "Your flights must be separated by at least 30 minutes. " .
-                        "Your arrival at {$newFlight->formatted_eta} is too close to your departure at {$existingFlight->formatted_ctot} (only {$timeDiff} minutes apart)."
-                    );
-                }
+            // Check if later flight departs before earlier flight lands (overlap)
+            if ($laterFlight->ctot < $earlierFlight->eta) {
+                return ValidationResult::error(
+                    "Your flights overlap in time. Flight departing at {$laterFlight->formatted_ctot} " .
+                    "starts before your other flight lands at {$earlierFlight->formatted_eta}."
+                );
             }
 
-            // Note: Independent flights (no shared airports) require no time validation
+            // Check 20-minute minimum separation
+            $timeDiff = $laterFlight->ctot->diffInMinutes($earlierFlight->eta);
+            if ($timeDiff < 20) {
+                return ValidationResult::error(
+                    "Your flights must be separated by at least 20 minutes. " .
+                    "Your flight landing at {$earlierFlight->formatted_eta} is too close to " .
+                    "your next flight departing at {$laterFlight->formatted_ctot} (only {$timeDiff} minutes apart)."
+                );
+            }
         }
 
         return ValidationResult::success();

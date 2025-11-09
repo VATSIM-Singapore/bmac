@@ -26,7 +26,6 @@ use App\Http\Requests\Booking\Admin\UpdateBooking;
 use App\Http\Requests\Booking\Admin\ImportBookings;
 use App\Services\CachedDataService;
 use App\Services\BayAssignmentService;
-use App\Services\RealFlightBookingValidator;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class BookingAdminController extends AdminController
@@ -236,17 +235,6 @@ class BookingAdminController extends AdminController
                 $changes->push(
                     ['name' => 'message', 'new' => $request->message]
                 );
-            }
-        }
-
-        // Validate Real Flight Operations booking restrictions for admin update
-        if ($booking->user) {
-            $validator = new RealFlightBookingValidator();
-            $validationResult = $validator->validateBooking($booking->user, $booking->event, $flight);
-
-            if (!$validationResult->isSuccess()) {
-                flashMessage('danger', __('Booking Restricted'), $validationResult->errorMessage);
-                return to_route('bookings.event.index', $booking->event);
             }
         }
 

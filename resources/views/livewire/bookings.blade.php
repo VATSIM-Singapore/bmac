@@ -72,137 +72,156 @@
 
         @push('scripts')
             <script>
-                $(document).ready(function() {
-                    // Function to extract hour from time string (e.g. "12:34" -> "12")
-                    function extractHour(timeString) {
-                        if (!timeString) return '';
-                        const time = timeString.toString().trim();
-                        const match = time.match(/(\d{1,2}):?\d{0,2}/);
-                        return match ? match[1].padStart(2, '0') : '';
-                    }
+                // Define functions in global scope so they persist across Livewire updates
+                window.bookingFilters = window.bookingFilters || {};
 
-                    // Function to filter table rows
-                    function filterTable() {
-                        const filters = {
-                            std: $('#filter-std').val().trim(),
-                            sta: $('#filter-sta').val().trim(),
-                            flight: $('#filter-flight').val().toLowerCase().trim(),
-                            from: $('#filter-from').val().toLowerCase().trim(),
-                            to: $('#filter-to').val().toLowerCase().trim(),
-                            aircraft: $('#filter-aircraft').val().toLowerCase().trim()
-                        };
+                // Function to extract hour from time string (e.g. "12:34" -> "12")
+                window.bookingFilters.extractHour = function(timeString) {
+                    if (!timeString) return '';
+                    const time = timeString.toString().trim();
+                    const match = time.match(/(\d{1,2}):?\d{0,2}/);
+                    return match ? match[1].padStart(2, '0') : '';
+                };
 
-                        let visibleRows = 0;
-                        const totalRows = $('#bookings-table tbody tr').length;
+                // Function to filter table rows
+                window.bookingFilters.filterTable = function() {
+                    const filters = {
+                        std: $('#filter-std').val().trim(),
+                        sta: $('#filter-sta').val().trim(),
+                        flight: $('#filter-flight').val().toLowerCase().trim(),
+                        from: $('#filter-from').val().toLowerCase().trim(),
+                        to: $('#filter-to').val().toLowerCase().trim(),
+                        aircraft: $('#filter-aircraft').val().toLowerCase().trim()
+                    };
 
-                        $('#bookings-table tbody tr').each(function() {
-                            const row = $(this);
-                            let showRow = true;
+                    let visibleRows = 0;
+                    const totalRows = $('#bookings-table tbody tr').length;
 
-                            // Check STD filter (hour range)
-                            if (filters.std && showRow) {
-                                const stdData = row.data('std') || '';
-                                const stdHour = extractHour(stdData);
-                                showRow = stdHour === filters.std;
-                            }
+                    $('#bookings-table tbody tr').each(function() {
+                        const row = $(this);
+                        let showRow = true;
 
-                            // Check STA filter (hour range)
-                            if (filters.sta && showRow) {
-                                const staData = row.data('sta') || '';
-                                const staHour = extractHour(staData);
-                                showRow = staHour === filters.sta;
-                            }
-
-                            // Check Flight filter
-                            if (filters.flight && showRow) {
-                                const flightData = row.data('flight') || '';
-                                showRow = flightData.toString().toLowerCase().includes(filters.flight);
-                            }
-
-                            // Check From filter
-                            if (filters.from && showRow) {
-                                const fromData = row.data('from') || '';
-                                const fromNameData = row.data('from-name') || '';
-                                showRow = fromData.toString().toLowerCase().includes(filters.from) ||
-                                         fromNameData.toString().toLowerCase().includes(filters.from);
-                            }
-
-                            // Check To filter
-                            if (filters.to && showRow) {
-                                const toData = row.data('to') || '';
-                                const toNameData = row.data('to-name') || '';
-                                showRow = toData.toString().toLowerCase().includes(filters.to) ||
-                                         toNameData.toString().toLowerCase().includes(filters.to);
-                            }
-
-                            // Check Aircraft filter
-                            if (filters.aircraft && showRow) {
-                                const aircraftData = row.data('aircraft') || '';
-                                showRow = aircraftData.toString().toLowerCase().includes(filters.aircraft);
-                            }
-
-                            // Show/hide row
-                            if (showRow) {
-                                row.show();
-                                visibleRows++;
-                            } else {
-                                row.hide();
-                            }
-                        });
-
-                        // Update results counter
-                        updateFilterCounter(visibleRows, totalRows);
-                    }
-
-                    // Function to update the filter results counter
-                    function updateFilterCounter(visible, total) {
-                        const hasFilters = $('#filter-std').val() || $('#filter-sta').val() ||
-                                         $('#filter-flight').val() || $('#filter-from').val() ||
-                                         $('#filter-to').val() || $('#filter-aircraft').val();
-
-                        if (hasFilters) {
-                            $('#filter-results-count').text(`Showing ${visible} of ${total} flights`);
-                        } else {
-                            $('#filter-results-count').text('');
+                        // Check STD filter (hour range)
+                        if (filters.std && showRow) {
+                            const stdData = row.data('std') || '';
+                            const stdHour = window.bookingFilters.extractHour(stdData);
+                            showRow = stdHour === filters.std;
                         }
-                    }
 
-                    // Function to clear all filters
-                    function clearFilters() {
-                        $('#filter-std, #filter-sta, #filter-flight, #filter-from, #filter-to, #filter-aircraft').val('');
-                        $('#bookings-table tbody tr').show();
+                        // Check STA filter (hour range)
+                        if (filters.sta && showRow) {
+                            const staData = row.data('sta') || '';
+                            const staHour = window.bookingFilters.extractHour(staData);
+                            showRow = staHour === filters.sta;
+                        }
+
+                        // Check Flight filter
+                        if (filters.flight && showRow) {
+                            const flightData = row.data('flight') || '';
+                            showRow = flightData.toString().toLowerCase().includes(filters.flight);
+                        }
+
+                        // Check From filter
+                        if (filters.from && showRow) {
+                            const fromData = row.data('from') || '';
+                            const fromNameData = row.data('from-name') || '';
+                            showRow = fromData.toString().toLowerCase().includes(filters.from) ||
+                                     fromNameData.toString().toLowerCase().includes(filters.from);
+                        }
+
+                        // Check To filter
+                        if (filters.to && showRow) {
+                            const toData = row.data('to') || '';
+                            const toNameData = row.data('to-name') || '';
+                            showRow = toData.toString().toLowerCase().includes(filters.to) ||
+                                     toNameData.toString().toLowerCase().includes(filters.to);
+                        }
+
+                        // Check Aircraft filter
+                        if (filters.aircraft && showRow) {
+                            const aircraftData = row.data('aircraft') || '';
+                            showRow = aircraftData.toString().toLowerCase().includes(filters.aircraft);
+                        }
+
+                        // Show/hide row
+                        if (showRow) {
+                            row.show();
+                            visibleRows++;
+                        } else {
+                            row.hide();
+                        }
+                    });
+
+                    // Update results counter
+                    window.bookingFilters.updateFilterCounter(visibleRows, totalRows);
+                };
+
+                // Function to update the filter results counter
+                window.bookingFilters.updateFilterCounter = function(visible, total) {
+                    const hasFilters = $('#filter-std').val() || $('#filter-sta').val() ||
+                                     $('#filter-flight').val() || $('#filter-from').val() ||
+                                     $('#filter-to').val() || $('#filter-aircraft').val();
+
+                    if (hasFilters) {
+                        $('#filter-results-count').text(`Showing ${visible} of ${total} flights`);
+                    } else {
                         $('#filter-results-count').text('');
-                        // Don't collapse the filter section - keep it open
                     }
+                };
 
+                // Function to clear all filters
+                window.bookingFilters.clearFilters = function() {
+                    $('#filter-std, #filter-sta, #filter-flight, #filter-from, #filter-to, #filter-aircraft').val('');
+                    $('#bookings-table tbody tr').show();
+                    $('#filter-results-count').text('');
+                    // Don't collapse the filter section - keep it open
+                };
+
+                // Function to initialize filter events
+                window.bookingFilters.initializeFilters = function() {
                     // Bind filter events
-                    $('#filter-std, #filter-sta, #filter-flight, #filter-from, #filter-to, #filter-aircraft').on('input keyup change', function() {
-                        filterTable();
+                    $('#filter-std, #filter-sta, #filter-flight, #filter-from, #filter-to, #filter-aircraft').off('input keyup change').on('input keyup change', function() {
+                        window.bookingFilters.filterTable();
                     });
 
                     // Bind clear filters event
-                    $('#clear-filters').on('click', function(e) {
+                    $('#clear-filters').off('click').on('click', function(e) {
                         e.preventDefault(); // Prevent default button behavior
                         e.stopPropagation(); // Prevent event bubbling to parent elements
-                        clearFilters();
+                        window.bookingFilters.clearFilters();
                     });
 
                     // Handle collapsible filter section
-                    $('#filter-collapse').on('show.bs.collapse', function () {
+                    $('#filter-collapse').off('show.bs.collapse').on('show.bs.collapse', function () {
                         $('#filter-chevron').removeClass('fa-chevron-right').addClass('fa-chevron-down');
                     });
 
-                    $('#filter-collapse').on('hide.bs.collapse', function () {
+                    $('#filter-collapse').off('hide.bs.collapse').on('hide.bs.collapse', function () {
                         $('#filter-chevron').removeClass('fa-chevron-down').addClass('fa-chevron-right');
                     });
 
                     // Make entire header clickable for collapse
-                    $('.card-header[data-toggle="collapse"]').on('click', function(e) {
+                    $('.card-header[data-toggle="collapse"]').off('click').on('click', function(e) {
                         $($(this).data('target')).collapse('toggle');
                     });
 
                     // Initial counter update
-                    updateFilterCounter($('#bookings-table tbody tr').length, $('#bookings-table tbody tr').length);
+                    window.bookingFilters.updateFilterCounter($('#bookings-table tbody tr').length, $('#bookings-table tbody tr').length);
+                    
+                    // Reapply filters after initialization (important for Livewire updates)
+                    if ($('#filter-std').val() || $('#filter-sta').val() || $('#filter-flight').val() || 
+                        $('#filter-from').val() || $('#filter-to').val() || $('#filter-aircraft').val()) {
+                        window.bookingFilters.filterTable();
+                    }
+                };
+
+                $(document).ready(function() {
+                    window.bookingFilters.initializeFilters();
+                });
+
+                // Re-initialize filters after Livewire updates (this fixes the auto-refresh issue)
+                document.addEventListener('livewire:update', function() {
+                    window.bookingFilters.initializeFilters();
                 });
             </script>
         @endpush

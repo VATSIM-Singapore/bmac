@@ -67,167 +67,7 @@
         </div>
     </div>
 
-    <!-- Bay Assignment Table -->
-    <div class="card mb-3">
-        <div class="card-header">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <h5 class="mb-0">Gate Schedule - {{ $event->airportDep->name ?? 'Unknown Airport' }}</h5>
-                    <small class="text-muted">
-                        Displaying: {{ $timeRange['start']->format('H:i') }} - {{ $timeRange['end']->format('H:i') }}
-                    </small>
-                </div>
-                <div class="text-right">
-                    <small class="text-muted d-block mb-1"><i class="fa fa-info-circle mr-1"></i>Legend:</small>
-                    <div>
-                        <span class="badge badge-warning mr-1">Arrival</span>
-                        <span class="badge badge-info mr-1">Departure</span>
-                        <span class="badge badge-warning adhoc-striped mr-1">Ad Hoc Arrival</span>
-                        <span class="badge badge-info adhoc-striped">Ad Hoc Departure</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="card-body p-0">
-            <div class="table-container">
-                <table class="table table-bordered table-sm gate-table mb-0">
-                    <thead class="thead-dark">
-                        <tr>
-                            <th class="bg-dark text-white sticky-gate-header">Gate</th>
-                            @foreach($timeSlots as $timeSlot)
-                                <th class="sticky-time-header">{{ $timeSlot->format('H:i') }}</th>
-                            @endforeach
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach($bays as $bay)
-                            @php
-                                // Use pre-computed data from controller
-                                $bayData = $bayUsage[$bay->id] ?? [];
-
-                                // Calculate max rows needed for this bay
-                                $maxOverlaps = 1;
-                                foreach($bayData as $timeKey => $assignments) {
-                                    if (is_array($assignments)) {
-                                        $maxOverlaps = max($maxOverlaps, count($assignments));
-                                    }
-                                }
-                            @endphp
-
-                            {{-- Create sub-rows for this bay --}}
-                            @for($subRow = 0; $subRow < $maxOverlaps; $subRow++)
-                                <tr class="{{ $subRow > 0 ? 'bay-sub-row' : 'bay-main-row' }} {{ in_array($bay->id, $blockedBayIds) ? 'bay-blocked-row' : '' }}" data-gate="{{ $bay->name }}" data-bay-id="{{ $bay->id }}">
-                                    @if($subRow === 0)
-                                        <td class="bg-dark text-white font-weight-bold sticky-gate-cell {{ in_array($bay->id, $blockedBayIds) ? 'bay-blocked' : '' }}"
-                                            rowspan="{{ $maxOverlaps }}">
-                                            <div class="d-flex align-items-center">
-                                                <span>{{ $bay->name }}</span>
-                                                @if(in_array($bay->id, $blockedBayIds))
-                                                    <i class="fa fa-ban text-white ml-2 bay-blocked-icon"
-                                                       data-toggle="tooltip"
-                                                       data-placement="right"
-                                                       title="This bay is blocked."></i>
-                                                @endif
-                                                @if($maxOverlaps > 1)
-                                                    <i class="fa fa-exclamation-triangle text-warning ml-2 gate-overlap-warning"
-                                                       data-toggle="tooltip"
-                                                       data-placement="right"
-                                                       title="Gate has {{ $maxOverlaps }} overlapping assignments. Multiple flights are scheduled at the same time."></i>
-                                                @endif
-                                            </div>
-                                        </td>
-                                    @endif
-
-                                    @php $skipCells = []; @endphp
-
-                                    @foreach($timeSlots as $slotIndex => $timeSlot)
-                                        @if(in_array($slotIndex, $skipCells))
-                                            {{-- Skip this cell due to colspan --}}
-                                            @continue
-                                        @endif
-
-                                        @php
-                                            $timeKey = $timeSlot->format('Y-m-d H:i');
-                                            $assignments = $bayData[$timeKey] ?? [];
-
-                                            // Ensure assignments is an array and get the assignment for this sub-row
-                                            $assignment = null;
-                                            if (is_array($assignments) && isset($assignments[$subRow]) && $assignments[$subRow] !== null) {
-                                                $assignment = $assignments[$subRow];
-                                            }
-                                        @endphp
-
-                                        @if($assignment)
-                                            @php
-                                                $cssClass = 'bg-warning text-white'; // Default for arrival
-                                                if ($assignment['type'] === 'departure') {
-                                                    $cssClass = 'bg-info text-white';
-                                                } elseif ($assignment['type'] === 'adhoc') {
-                                                    // Use striped pattern for ad hoc flights
-                                                    if ($assignment['flight_type'] === 'departure') {
-                                                        $cssClass = 'bg-info text-white adhoc-striped';
-                                                    } else {
-                                                        $cssClass = 'bg-warning text-white adhoc-striped';
-                                                    }
-                                                }
-                                                $colspan = $assignment['colspan'] ?? 1;
-
-                                                // Only add cells to skip if colspan > 1
-                                                if ($colspan > 1) {
-                                                    for($i = 1; $i < $colspan; $i++) {
-                                                        $skipCells[] = $slotIndex + $i;
-                                                    }
-                                                }
-                                            @endphp
-
-                                            <td class="time-slot {{ $cssClass }} flight-assignment-cell"
-                                                @if($colspan > 1)
-                                                    colspan="{{ $colspan }}"
-                                                @endif
-                                                data-flight-id="{{ $assignment['flight']->id }}"
-                                                data-assignment-type="{{ $assignment['type'] }}"
-                                                data-aircraft-type="{{ $assignment['aircraft_type'] ?? 'Unknown' }}"
-                                                data-bay-id="{{ $bay->id }}"
-                                                data-time-slot="{{ $timeSlot->format('H:i') }}"
-                                                data-original-bay="{{ $bay->name }}"
-                                                @if($assignment['type'] === 'adhoc')
-                                                    data-callsign="{{ $assignment['flight']->callsign }}"
-                                                    data-ac-type="{{ $assignment['flight']->acType }}"
-                                                    data-dep="{{ $assignment['flight']->dep }}"
-                                                    data-arr="{{ $assignment['flight']->arr }}"
-                                                    data-std="{{ $assignment['flight']->std ? $assignment['flight']->std->format('Y-m-d H:i:s') : '' }}"
-                                                    data-sta="{{ $assignment['flight']->sta ? $assignment['flight']->sta->format('Y-m-d H:i:s') : '' }}"
-                                                @endif
-                                                style="cursor: grab;"
-                                                title="Drag to move flight or click to view/edit details"
-                                                tabindex="0"
-                                                role="button"
-                                                aria-label="Drag to move or view flight details for {{ $assignment['callsign'] }}"
-                                                draggable="true">
-
-                                                <div class="text-center flight-details">
-                                                    <div class="flight-callsign">{{ $assignment['callsign'] }}</div>
-                                                    <div class="flight-airport-aircraft">
-                                                        {{ $assignment['relevant_airport_icao'] ?? $assignment['relevant_airport'] }}
-                                                        @if($assignment['aircraft_type'] && $assignment['aircraft_type'] !== 'Unknown')
-                                                            ({{ $assignment['aircraft_type'] }})
-                                                        @endif
-                                                    </div>
-                                                    <div class="flight-time">{{ $assignment['time_from'] }}-{{ $assignment['time_to'] }}</div>
-                                                </div>
-                                            </td>
-                                        @else
-                                            <td class="time-slot table-light"></td>
-                                        @endif
-                                    @endforeach
-                                </tr>
-                            @endfor
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
+    @include('event.bay-management.partials.table')
 </div>
 
 <!-- Flight Details Modal -->
@@ -376,7 +216,7 @@
                                     <label for="dep" class="font-weight-bold">Departure Airport:</label>
                                     <select class="form-control" id="dep" name="dep">
                                         <option value="">-- Select Airport --</option>
-                                        @foreach(\App\Models\Airport::orderBy('name')->get() as $airport)
+                                        @foreach($airports as $airport)
                                             <option value="{{ $airport->id }}">{{ $airport->name }} ({{ $airport->icao }})</option>
                                         @endforeach
                                     </select>
@@ -387,7 +227,7 @@
                                     <label for="arr" class="font-weight-bold">Arrival Airport:</label>
                                     <select class="form-control" id="arr" name="arr">
                                         <option value="">-- Select Airport --</option>
-                                        @foreach(\App\Models\Airport::orderBy('name')->get() as $airport)
+                                        @foreach($airports as $airport)
                                             <option value="{{ $airport->id }}">{{ $airport->name }} ({{ $airport->icao }})</option>
                                         @endforeach
                                     </select>
@@ -868,11 +708,34 @@
         0% { transform: translate(-50%, -50%) rotate(0deg); }
         100% { transform: translate(-50%, -50%) rotate(360deg); }
     }
+
+    /* Prevent child elements from interfering with drag detection — replaces JS makeChildrenNonDraggable */
+    .flight-assignment-cell > * {
+        pointer-events: none;
+        -webkit-user-drag: none;
+    }
 </style>
 @endpush
 
 @push('scripts')
 <script>
+// ---------------------------------------------------------------------------
+// Time-slot index map — built once on load and rebuilt after each table reload.
+// Eliminates repeated DOM traversals during drag-and-drop.
+// ---------------------------------------------------------------------------
+let timeSlotIndexMap = {};
+let timeSlotList     = [];
+
+function buildTimeSlotMap() {
+    timeSlotIndexMap = {};
+    timeSlotList     = [];
+    $('.sticky-time-header').each(function(i) {
+        const t = $(this).text().trim();
+        timeSlotIndexMap[t] = i;
+        timeSlotList.push(t);
+    });
+}
+
 // Safe modal close function to prevent ARIA issues (global scope)
 function closeModalSafely() {
     // Remove focus from any focused element
@@ -1462,19 +1325,18 @@ function populateAirportOptions() {
     }
 }
 
-// Reload bay matrix function (global scope)
+// Reload bay matrix function (global scope).
+// Fetches only the table partial (not the full page) — much faster.
 function reloadBayMatrix() {
-    // Capture current scroll position before refresh
-    const $tableContainer = $('.table-container');
+    const $card = $('#bayMatrixCard');
+    const $tableContainer = $card.find('.table-container');
     const scrollTop = $tableContainer.scrollTop();
     const scrollLeft = $tableContainer.scrollLeft();
 
-    // Store the position for visual feedback
-    window.lastScrollPosition = { top: scrollTop, left: scrollLeft };
-
-    // Show loading indicator
+    // Show loading indicator inside the existing table container
     $tableContainer.prepend(`
-        <div class="text-center p-3" id="tableLoadingIndicator">
+        <div class="text-center p-3" id="tableLoadingIndicator"
+             style="position:sticky;left:0;background:rgba(255,255,255,0.85);z-index:300;">
             <div class="spinner-border text-primary" role="status">
                 <span class="sr-only">Loading...</span>
             </div>
@@ -1482,62 +1344,41 @@ function reloadBayMatrix() {
         </div>
     `);
 
-    // Reload the page content via AJAX
     $.ajax({
-        url: window.location.href,
+        url: '{{ route("admin.events.bay-management.matrix-partial", $event) }}',
         method: 'GET',
         success: function(response) {
-            // Extract the table content from the response
-            const $newContent = $(response);
-            const $newTable = $newContent.find('.table-container');
+            const $newCard = $(response.html);
 
-            if ($newTable.length > 0) {
-                // Replace the table container
-                $tableContainer.replaceWith($newTable);
+            // Replace the whole card
+            $card.replaceWith($newCard);
 
-                // Re-bind event handlers for the new table
-                initializeTableEventHandlers();
+            // Rebuild the time-slot index map for drag-and-drop
+            buildTimeSlotMap();
 
-                // Re-initialize tooltips for the new table
-                initializeTooltips();
+            // Re-bind event handlers and tooltips
+            initializeTableEventHandlers();
+            initializeTooltips();
 
-                // Re-apply current filters if any are selected
-                applyFilters();
+            // Re-apply active filters
+            applyFilters();
 
-                // Refresh warning data after table update
-                generateWarningBannerFromMatrix();
+            // Refresh warning banner
+            generateWarningBannerFromMatrix();
 
-                // Restore scroll position after a brief delay to ensure DOM is ready
-                setTimeout(function() {
-                    const $newTableContainer = $('.table-container');
+            // Restore scroll position
+            const $newContainer = $('#bayMatrixCard').find('.table-container');
+            const maxScrollTop  = $newContainer[0].scrollHeight - $newContainer[0].clientHeight;
+            const maxScrollLeft = $newContainer[0].scrollWidth  - $newContainer[0].clientWidth;
 
-                    // Ensure the scroll position doesn't exceed the new content dimensions
-                    const maxScrollTop = $newTableContainer[0].scrollHeight - $newTableContainer[0].clientHeight;
-                    const maxScrollLeft = $newTableContainer[0].scrollWidth - $newTableContainer[0].clientWidth;
-
-                    const adjustedScrollTop = Math.min(scrollTop, maxScrollTop);
-                    const adjustedScrollLeft = Math.min(scrollLeft, maxScrollLeft);
-
-                    // Only restore scroll position if it was greater than 0
-                    if (scrollTop > 0 || scrollLeft > 0) {
-                        $newTableContainer.scrollTop(adjustedScrollTop);
-                        $newTableContainer.scrollLeft(adjustedScrollLeft);
-
-                        // Add subtle visual feedback that position was restored
-                        $newTableContainer.addClass('position-restored');
-                        setTimeout(function() {
-                            $newTableContainer.removeClass('position-restored');
-                        }, 1000);
-                    }
-                }, 100); // Increased delay to ensure DOM is fully ready
+            if (scrollTop > 0 || scrollLeft > 0) {
+                $newContainer.scrollTop(Math.min(scrollTop, maxScrollTop));
+                $newContainer.scrollLeft(Math.min(scrollLeft, maxScrollLeft));
             }
         },
         error: function(xhr, status, error) {
             console.error('Error reloading bay matrix:', error);
             showMessage('danger', 'Error updating bay assignments. Please refresh the page.');
-        },
-        complete: function() {
-            // Remove loading indicator
             $('#tableLoadingIndicator').remove();
         }
     });
@@ -1597,6 +1438,9 @@ function saveAdhocFlightEdit() {
 }
 
 $(document).ready(function() {
+    // Build time-slot index map before drag-and-drop initialises
+    buildTimeSlotMap();
+
     // Initialize table event handlers
     initializeTableEventHandlers();
 
@@ -1748,15 +1592,22 @@ $(document).ready(function() {
         }
     });
 
+    // Track whether any bay blocking change was made during the modal session
+    let bayBlockingChanged = false;
+
     function initializeBayBlocking() {
         // Load blocked bays when modal is shown
         $('#bayBlockingModal').on('show.bs.modal', function() {
+            bayBlockingChanged = false;
             loadBlockedBays();
         });
 
-        // Refresh bay matrix when modal is closed
+        // Only reload the matrix if something actually changed
         $('#bayBlockingModal').on('hidden.bs.modal', function() {
-            reloadBayMatrix();
+            if (bayBlockingChanged) {
+                bayBlockingChanged = false;
+                reloadBayMatrix();
+            }
         });
 
         // Handle modal close to prevent aria-hidden warning
@@ -1833,6 +1684,7 @@ $(document).ready(function() {
             },
             success: function(response) {
                 if (response.success) {
+                    bayBlockingChanged = true;
                     showBayBlockingMessage('success', response.message);
                     $('#baySelect').val('');
                     loadBlockedBays();
@@ -1866,6 +1718,7 @@ $(document).ready(function() {
             },
             success: function(response) {
                 if (response.success) {
+                    bayBlockingChanged = true;
                     showBayBlockingMessage('success', response.message);
                     loadBlockedBays();
                     updateBaySelectionDropdown();
@@ -1946,11 +1799,9 @@ $(document).ready(function() {
     }
 
     function initializeWarningBanner() {
-        // Generate warning banner from existing matrix data on page load
+        // Generate warning banner from existing matrix data on page load.
+        // It is also called automatically after each reloadBayMatrix() call.
         generateWarningBannerFromMatrix();
-
-        // Set up periodic refresh of warning data (every 30 seconds)
-        setInterval(generateWarningBannerFromMatrix, 30000);
     }
 
     function generateWarningBannerFromMatrix() {
@@ -2403,42 +2254,10 @@ $(document).ready(function() {
         let dragThreshold = 5; // pixels to move before drag starts
         let clickDetected = false;
         let justFinishedDragging = false;
+        let $lastDragHighlight = null; // tracks last highlighted cell to avoid full-table removeClass
 
-        // Function to make child elements non-draggable
-        function makeChildrenNonDraggable() {
-            $('.flight-assignment-cell[draggable="true"]').each(function() {
-                // Set draggable=false on all children and make them not interfere
-                $(this).find('*').attr('draggable', 'false').css({
-                    'pointer-events': 'none',
-                    '-webkit-user-drag': 'none'
-                });
-            });
-        }
-
-        // Initial setup
-        makeChildrenNonDraggable();
-
-        // Re-apply after any DOM mutations
-        const observer = new MutationObserver(function(mutations) {
-            let shouldUpdate = false;
-            mutations.forEach(function(mutation) {
-                if (mutation.addedNodes.length > 0) {
-                    shouldUpdate = true;
-                }
-            });
-            if (shouldUpdate) {
-                setTimeout(makeChildrenNonDraggable, 10);
-            }
-        });
-
-        // Observe the table for changes
-        const tableContainer = document.querySelector('.table-responsive');
-        if (tableContainer) {
-            observer.observe(tableContainer, {
-                childList: true,
-                subtree: true
-            });
-        }
+        // Note: child pointer-events are disabled via CSS (.flight-assignment-cell > *)
+        // No MutationObserver needed.
 
         // Handle mousedown - start potential drag
         $(document).on('mousedown', '.flight-assignment-cell[draggable="true"]', function(e) {
@@ -2532,11 +2351,8 @@ $(document).ready(function() {
                     placeholders.push('<td class="time-slot table-light drag-placeholder" style="position: relative; z-index: 100;"></td>');
                 }
                 $cell.after(placeholders.join(''));
-                
-                // Re-apply pointer-events to new cells
-                makeChildrenNonDraggable();
             }
-            
+
             // Trigger custom dragstart event
             $cell.trigger('customdragstart');
         }
@@ -2629,7 +2445,11 @@ $(document).ready(function() {
             // Always clean up visual state
             $cell.removeClass('dragging');
             $('body').removeClass('dragging');
-            $('.time-slot').removeClass('drag-over drop-target blocked overlap');
+            // Only clear the one highlighted cell, not all time-slot cells
+            if ($lastDragHighlight) {
+                $lastDragHighlight.removeClass('drag-over drop-target blocked overlap');
+                $lastDragHighlight = null;
+            }
             $cell.css('cursor', 'grab');
             
             // Always restore original colspan and remove placeholder cells
@@ -2645,10 +2465,7 @@ $(document).ready(function() {
                 if (originalContent) {
                     $cell.html(originalContent);
                 }
-                
-                // Re-apply pointer-events
-                makeChildrenNonDraggable();
-                
+
                 // Clear data
                 $cell.removeData('original-colspan');
                 $cell.removeData('original-content');
@@ -2688,198 +2505,29 @@ $(document).ready(function() {
         // Maintain hover effects during custom drag
         $(document).on('mousemove', function(e) {
             if (!isDragging) return;
-            
+
             // Find the element under the mouse
             const $target = $(document.elementFromPoint(e.clientX, e.clientY));
             const $timeSlot = $target.closest('.time-slot');
-            
-            if ($timeSlot.length) {
+
+            // Skip if still over the same cell
+            if ($timeSlot.length && (!$lastDragHighlight || $lastDragHighlight[0] !== $timeSlot[0])) {
                 highlightDropTarget($timeSlot);
             }
         });
 
-        // Handle drag start
+        // Suppress the browser's native drag behaviour so only the custom
+        // mousedown/mousemove/mouseup system handles all drag-and-drop.
         $(document).on('dragstart', '.flight-assignment-cell[draggable="true"]', function(e) {
-            const $this = $(this);
-            draggedElement = this;
-            
-            // Cache jQuery selectors
-            const $flightCallsign = $this.find('.flight-callsign');
-            const $flightTime = $this.find('.flight-time');
-            
-            draggedData = {
-                flightId: $this.data('flight-id'),
-                assignmentType: $this.data('assignment-type'),
-                aircraftType: $this.data('aircraft-type'),
-                originalBayId: $this.data('bay-id'),
-                originalBayName: $this.data('original-bay'),
-                timeSlot: $this.data('time-slot'),
-                callsign: $flightCallsign.text().trim(),
-                // Get original assignment times from the flight details
-                originalTimeFrom: $flightTime.text().trim().split('-')[0],
-                originalTimeTo: $flightTime.text().trim().split('-')[1]
-            };
-            
-            // Add additional data for ad hoc flights
-            if ($this.data('assignment-type') === 'adhoc') {
-                draggedData.callsign = $this.data('callsign');
-                draggedData.aircraftType = $this.data('ac-type');
-                draggedData.dep = $this.data('dep');
-                draggedData.arr = $this.data('arr');
-                draggedData.std = $this.data('std');
-                draggedData.sta = $this.data('sta');
-            }
-            
-            originalPosition = {
-                row: $this.closest('tr'),
-                cell: $this
-            };
-
-            // Add dragging class to both the element and body immediately
-            $this.addClass('dragging');
-            $('body').addClass('dragging');
-            
-            // Store original colspan and split cell into individual columns
-            const originalColspan = $this.attr('colspan');
-            if (originalColspan && parseInt(originalColspan) > 1) {
-                const colspan = parseInt(originalColspan);
-                $this.data('original-colspan', originalColspan);
-                
-                // Store original HTML content
-                const originalContent = $this[0].innerHTML; // Use native innerHTML for speed
-                $this.data('original-content', originalContent);
-                
-                // Set colspan to 1 and add empty cells after it - optimized
-                $this.attr('colspan', '1');
-                
-                // Build all placeholder cells at once
-                const placeholders = [];
-                for (let i = 1; i < colspan; i++) {
-                    placeholders.push('<td class="time-slot table-light drag-placeholder" style="position: relative; z-index: 100;"></td>');
-                }
-                $this.after(placeholders.join(''));
-            }
-
-            // Create custom drag image - simplified
-            const dragPreview = document.createElement('div');
-            dragPreview.className = 'drag-preview';
-            dragPreview.innerHTML = `
-                <div style="font-weight: bold;">${draggedData.callsign}</div>
-                <div style="font-size: 0.7rem; color: #666;">${draggedData.aircraftType}</div>
-                <div style="font-size: 0.7rem; color: #666;">${draggedData.timeSlot}</div>
-            `;
-            
-            document.body.appendChild(dragPreview);
-            e.originalEvent.dataTransfer.setDragImage(dragPreview, 0, 0);
-            e.originalEvent.dataTransfer.effectAllowed = 'move';
-            e.originalEvent.dataTransfer.setData('text/plain', draggedData.flightId);
-
-            // Clean up drag preview after a short delay
-            setTimeout(() => dragPreview.remove(), 100);
-        });
-
-        // Handle drag end
-        $(document).on('dragend', '.flight-assignment-cell[draggable="true"]', function(e) {
-            $(this).removeClass('dragging');
-            $('body').removeClass('dragging');
-            $('.time-slot').removeClass('drag-over drop-target blocked overlap');
-            
-            // Restore original colspan and remove placeholder cells
-            if ($(this).data('original-colspan')) {
-                const originalColspan = $(this).data('original-colspan');
-                const originalContent = $(this).data('original-content');
-                
-                // Remove all placeholder cells that were added
-                $(this).nextAll('.drag-placeholder').remove();
-                
-                // Restore colspan and content
-                $(this).attr('colspan', originalColspan);
-                if (originalContent) {
-                    $(this).html(originalContent);
-                }
-                
-                // Clear data
-                $(this).removeData('original-colspan');
-                $(this).removeData('original-content');
-            }
-            
-            // Clear any pending drag over timeout
-            clearTimeout(dragOverTimeout);
-            
-            draggedElement = null;
-            draggedData = null;
-            originalPosition = null;
-        });
-
-        // Handle drag over - optimized for performance
-        let dragOverTimeout;
-        $(document).on('dragover', '.time-slot', function(e) {
             e.preventDefault();
-            e.originalEvent.dataTransfer.dropEffect = 'move';
-            
-            if (!draggedData) return;
-
-            // For multi-column spans, we need to handle the case where the dragged element
-            // covers multiple cells but we want to allow dropping on individual cells
-            const $currentCell = $(this);
-            
-            // If this cell is part of a dragged multi-column span, we need special handling
-            if ($currentCell.hasClass('flight-assignment-cell') && 
-                $currentCell.data('flight-id') === draggedData.flightId &&
-                $currentCell.attr('colspan') && parseInt($currentCell.attr('colspan')) > 1) {
-                
-                // For multi-column spans being dragged, allow drops on individual time slots
-                // that would be covered by this span
-                const colspan = parseInt($currentCell.attr('colspan'));
-                const cellIndex = $currentCell.index() - 1; // Subtract 1 for bay column
-                
-                // Find the individual time slot cells that would be covered by this span
-                const $row = $currentCell.closest('tr');
-                const $timeSlotCells = $row.find('.time-slot:not(.flight-assignment-cell)');
-                
-                // Check if we're over one of the individual time slot cells that this span covers
-                let isOverCoveredCell = false;
-                for (let i = cellIndex; i < cellIndex + colspan && i < $timeSlotCells.length; i++) {
-                    if ($timeSlotCells.eq(i).is(e.target) || $timeSlotCells.eq(i).has(e.target).length > 0) {
-                        isOverCoveredCell = true;
-                        break;
-                    }
-                }
-                
-                if (isOverCoveredCell) {
-                    // Debounce the highlighting to improve performance
-                    clearTimeout(dragOverTimeout);
-                    dragOverTimeout = setTimeout(() => {
-                        highlightDropTarget($(this));
-                    }, 10);
-                }
-            } else {
-                // Normal drag over handling for non-spanning cells
-                clearTimeout(dragOverTimeout);
-                dragOverTimeout = setTimeout(() => {
-                    highlightDropTarget($(this));
-                }, 10); // Small delay to prevent excessive DOM manipulation
-            }
-        });
-
-        // Additional handler for empty time slot cells to ensure they can receive drops
-        // even when covered by multi-column spans
-        $(document).on('dragover', '.time-slot.table-light', function(e) {
-            e.preventDefault();
-            e.originalEvent.dataTransfer.dropEffect = 'move';
-            
-            if (!draggedData) return;
-
-            // Always allow drops on empty time slot cells
-            clearTimeout(dragOverTimeout);
-            dragOverTimeout = setTimeout(() => {
-                highlightDropTarget($(this));
-            }, 10);
         });
 
         function highlightDropTarget($cell) {
-            // Remove previous drag-over classes
-            $('.time-slot').removeClass('drag-over drop-target blocked overlap');
+            // Only clear the previously highlighted cell — not ALL time-slot cells
+            if ($lastDragHighlight && $lastDragHighlight[0] !== $cell[0]) {
+                $lastDragHighlight.removeClass('drag-over drop-target blocked overlap');
+            }
+            $lastDragHighlight = $cell;
 
             // Add drag-over class
             $cell.addClass('drag-over');
@@ -2936,122 +2584,18 @@ $(document).ready(function() {
             return false;
         }
 
-        // Handle drag leave
-        $(document).on('dragleave', '.time-slot', function(e) {
-            // Only remove classes if we're actually leaving the element
-            if (!$(this).is(e.relatedTarget) && !$(this).has(e.relatedTarget).length) {
-                $(this).removeClass('drag-over drop-target blocked overlap');
-            }
-        });
-
-        // Handle drop
-        $(document).on('drop', '.time-slot', function(e) {
-            e.preventDefault();
-            
-            if (!draggedData) return;
-
-            const targetCell = $(this);
-            const targetRow = targetCell.closest('tr');
-            const targetBayId = targetRow.data('bay-id');
-            const targetBayName = targetRow.data('gate');
-            let targetTimeSlotIndex = targetCell.index() - 1; // Subtract 1 for the bay column
-
-            // Handle special case for multi-column spans
-            // If we're dropping on a cell that's part of a multi-column flight assignment,
-            // we need to find the actual time slot index
-            if (targetCell.hasClass('flight-assignment-cell') && 
-                targetCell.data('flight-id') === draggedData.flightId &&
-                targetCell.attr('colspan') && parseInt(targetCell.attr('colspan')) > 1) {
-                
-                // For multi-column spans, use the original time slot index
-                targetTimeSlotIndex = getTimeSlotIndex(draggedData.timeSlot);
-            }
-
-            // Remove drag classes
-            $('.time-slot').removeClass('drag-over drop-target blocked overlap');
-
-            // Validate drop target
-            if (!targetBayId || !targetBayName) {
-                showMessage('danger', 'Invalid drop target. Please drop on a valid bay time slot.');
-                return;
-            }
-
-            // Check if dropping on the same position
-            if (targetBayId == draggedData.originalBayId && 
-                targetTimeSlotIndex === getTimeSlotIndex(draggedData.timeSlot)) {
-                showMessage('info', 'Flight is already at this position.');
-                return;
-            }
-
-            // Check for blocked bay
-            if (targetRow.hasClass('bay-blocked-row')) {
-                showMessage('danger', 'Cannot assign flight to a blocked bay.');
-                return;
-            }
-
-            // Check for existing flight (overlap) - improved for colspan handling
-            const isOverlapping = checkForOverlap(targetCell, draggedData);
-            if (isOverlapping) {
-                // Find the existing flight's callsign
-                let existingCallsign = 'another flight';
-                if (targetCell.hasClass('flight-assignment-cell')) {
-                    existingCallsign = targetCell.find('.flight-callsign').text().trim();
-                } else {
-                    // Check if we're overlapping with the original position (same flight)
-                    if (targetBayId == draggedData.originalBayId && 
-                        targetTimeSlotIndex >= getTimeSlotIndex(draggedData.timeSlot)) {
-                        const $originalCell = originalPosition.cell;
-                        const colspan = parseInt($originalCell.attr('colspan')) || 1;
-                        const originalTimeSlotIndex = getTimeSlotIndex(draggedData.timeSlot);
-                        
-                        if (targetTimeSlotIndex < originalTimeSlotIndex + colspan) {
-                            // This is the same flight, no overlap
-                            isOverlapping = false;
-                        }
-                    }
-                }
-                
-                if (isOverlapping) {
-                    const confirmMessage = `This will create an overlap with ${existingCallsign}. Do you want to proceed?`;
-                    
-                    if (!confirm(confirmMessage)) {
-                        return;
-                    }
-                }
-            }
-
-            // Calculate new time based on target position
-            const newTime = calculateNewTimeFromSlot(targetTimeSlotIndex);
-            if (!newTime) {
-                showMessage('danger', 'Unable to calculate new time for this position.');
-                return;
-            }
-
-            // Show loading state
-            $(originalPosition.cell).addClass('updating');
-
-            // Perform the update
-            updateFlightAssignment(draggedData, targetBayId, targetBayName, newTime, targetCell);
-        });
-
-        // Helper function to get time slot index from time string
+        // Helper function to get time slot index from time string.
+        // Uses the pre-built timeSlotIndexMap — O(1) instead of DOM traversal.
         function getTimeSlotIndex(timeString) {
-            const timeSlots = $('.sticky-time-header').map(function() {
-                return $(this).text().trim();
-            }).get();
-            return timeSlots.indexOf(timeString);
+            return timeSlotIndexMap[timeString] ?? -1;
         }
 
-        // Helper function to calculate new time from slot index
+        // Helper function to calculate new time from slot index.
+        // Uses the pre-built timeSlotList array — O(1) instead of DOM traversal.
         function calculateNewTimeFromSlot(slotIndex) {
-            const timeSlots = $('.sticky-time-header').map(function() {
-                return $(this).text().trim();
-            }).get();
-            
-            if (slotIndex >= 0 && slotIndex < timeSlots.length) {
-                return timeSlots[slotIndex];
-            }
-            return null;
+            return (slotIndex >= 0 && slotIndex < timeSlotList.length)
+                ? timeSlotList[slotIndex]
+                : null;
         }
 
         // Function to update flight assignment

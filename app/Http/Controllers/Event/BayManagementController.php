@@ -18,7 +18,34 @@ class BayManagementController extends Controller
 {
     public function index(Event $event)
     {
-        // Ensure this is a Real Flight Ops event with same dep/arr airport
+        $this->validateEvent($event);
+
+        $cachedDataService = new CachedDataService();
+        $data = $this->buildMatrixData($event, $cachedDataService);
+        $airports = $cachedDataService->getAllAirportsList();
+
+        return view('event.bay-management.index', array_merge($data, compact('event', 'airports')));
+    }
+
+    /**
+     * Return only the bay matrix table HTML for AJAX partial refresh.
+     * Much faster than reloading the full page.
+     */
+    public function getMatrixPartial(Event $event): JsonResponse
+    {
+        $this->validateEvent($event);
+
+        $data = $this->buildMatrixData($event, new CachedDataService());
+        $html = view('event.bay-management.partials.table', array_merge($data, compact('event')))->render();
+
+        return response()->json(['html' => $html]);
+    }
+
+    /**
+     * Validate that the event is eligible for bay management.
+     */
+    private function validateEvent(Event $event): void
+    {
         if ($event->event_type_id !== EventType::REALFLIGHTOPS->value) {
             abort(403, 'Bay management is only available for Real Flight Ops events.');
         }
@@ -26,15 +53,16 @@ class BayManagementController extends Controller
         if (!$event->dep || !$event->arr || $event->dep !== $event->arr) {
             abort(403, 'Bay management is only available when departure and arrival airports are the same.');
         }
+    }
 
-        // Get all bays for the event airport
-        $cachedDataService = new CachedDataService();
+    /**
+     * Build the full matrix data set shared by index() and getMatrixPartial().
+     */
+    private function buildMatrixData(Event $event, CachedDataService $cachedDataService): array
+    {
         $bays = $cachedDataService->getSortedBays($event->dep);
+        $blockedBayIds = $cachedDataService->getBlockedBayIds($event->id);
 
-        // Get blocked bays for this event
-        $blockedBayIds = BayBlocking::where('event_id', $event->id)->pluck('bay_id')->toArray();
-
-        // Get all flights for this event that have bay assignments
         $flights = Flight::whereHas('booking', function ($query) use ($event) {
             $query->where('event_id', $event->id);
         })
@@ -45,28 +73,16 @@ class BayManagementController extends Controller
             })
             ->get();
 
-        // Get all ad hoc flights for this event that have bay assignments
         $adhocFlights = AdhocFlight::where('event_id', $event->id)
             ->with(['bay', 'airportDep', 'airportArr'])
             ->whereNotNull('bay_id')
             ->get();
 
-        // Determine time range from bay assignments (including ad hoc flights)
         $timeRange = $this->calculateTimeRange($event, $flights, $adhocFlights);
-
-        // Generate 5-minute time slots
         $timeSlots = $this->generateTimeSlots($timeRange['start'], $timeRange['end']);
+        $bayUsage  = $this->buildBayUsage($bays, $flights, $timeSlots, $event, $adhocFlights);
 
-        $bayUsage = $this->buildBayUsage($bays, $flights, $timeSlots, $event, $adhocFlights);
-
-        return view('event.bay-management.index', compact(
-            'event',
-            'bays',
-            'timeSlots',
-            'bayUsage',
-            'timeRange',
-            'blockedBayIds'
-        ));
+        return compact('bays', 'blockedBayIds', 'timeSlots', 'bayUsage', 'timeRange');
     }
 
     private function calculateTimeRange(Event $event, $flights, $adhocFlights = null)
@@ -697,22 +713,25 @@ class BayManagementController extends Controller
             }
         }
 
-        // Organize data by time slot and row
+        // Organize data by time slot and row.
+        // Only create entries for slots that actually have assignments — the view
+        // falls back to [] via the null-coalescing operator for all other slots.
         foreach ($timeSlots as $timeSlot) {
             $timeKey = $timeSlot->format('Y-m-d H:i');
             $assignments = $bayData[$timeKey] ?? [];
 
-            // Initialize row array for this time slot
+            if (empty($assignments)) {
+                continue;
+            }
+
             $organizedData[$timeKey] = [];
 
-            // Place assignments in their designated rows
             if (is_array($assignments)) {
                 foreach ($assignments as $assignment) {
                     if ($assignment && isset($assignment['flight']) && isset($assignment['type'])) {
                         $flightKey = $assignment['flight']->id . '_' . $assignment['type'];
                         $rowIndex = $flightToRowMap[$flightKey] ?? 0;
 
-                        // Ensure the row exists
                         while (count($organizedData[$timeKey]) <= $rowIndex) {
                             $organizedData[$timeKey][] = null;
                         }
@@ -786,6 +805,8 @@ class BayManagementController extends Controller
                 'bay_id' => $bayId
             ]);
 
+            (new CachedDataService())->clearBlockedBaysCache($event->id);
+
             return response()->json([
                 'success' => true,
                 'message' => "Bay {$bay->name} has been blocked successfully."
@@ -829,6 +850,8 @@ class BayManagementController extends Controller
 
             $bayName = $blocking->bay->name;
             $blocking->delete();
+
+            (new CachedDataService())->clearBlockedBaysCache($event->id);
 
             return response()->json([
                 'success' => true,

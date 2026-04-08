@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Airport;
 use App\Models\Airline;
 use App\Models\Bay;
+use App\Models\BayBlocking;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 
@@ -185,6 +186,51 @@ class CachedDataService
     public function clearAirlinesCache(): void
     {
         Cache::forget('airlines_for_select');
+    }
+
+    /**
+     * Get all airports as a collection for modal dropdowns.
+     * Cached for 24 hours.
+     *
+     * @return Collection
+     */
+    public function getAllAirportsList(): Collection
+    {
+        try {
+            return Cache::remember('airports_list_modal', 86400, function () {
+                return Airport::orderBy('name')->get(['id', 'name', 'icao']);
+            });
+        } catch (\Exception $e) {
+            return Airport::orderBy('name')->get(['id', 'name', 'icao']);
+        }
+    }
+
+    /**
+     * Get blocked bay IDs for an event.
+     * Cached for 1 hour — invalidated when bays are blocked/unblocked.
+     *
+     * @param int $eventId
+     * @return array
+     */
+    public function getBlockedBayIds(int $eventId): array
+    {
+        try {
+            return Cache::remember("blocked_bay_ids_event_{$eventId}", 3600, function () use ($eventId) {
+                return BayBlocking::where('event_id', $eventId)->pluck('bay_id')->toArray();
+            });
+        } catch (\Exception $e) {
+            return BayBlocking::where('event_id', $eventId)->pluck('bay_id')->toArray();
+        }
+    }
+
+    /**
+     * Clear the blocked bays cache for a specific event.
+     *
+     * @param int $eventId
+     */
+    public function clearBlockedBaysCache(int $eventId): void
+    {
+        Cache::forget("blocked_bay_ids_event_{$eventId}");
     }
 
     /**

@@ -196,6 +196,12 @@ Breadcrumbs::for('faq', function ($trail) {
     $trail->push('FAQ', route('faq'));
 });
 
+// Home > Admin > Users
+Breadcrumbs::for('admin.users.index', function ($trail) {
+    $trail->parent('admin');
+    $trail->push('Users', route('admin.users.index'));
+});
+
 // Home > Admin > FAQ
 Breadcrumbs::for('admin.faq.index', function ($trail) {
     $trail->parent('admin');

@@ -14,6 +14,7 @@ use App\Http\Controllers\Booking\BookingAdminController;
 use App\Http\Controllers\AirportLink\AirportLinkAdminController;
 use App\Http\Controllers\EventLink\EventLinkAdminController;
 use App\Http\Controllers\BayController;
+use App\Http\Controllers\User\UserAdminController;
 
 /*
 |--------------------------------------------------------------------------
@@ -51,6 +52,10 @@ Route::group(['as' => 'admin.', 'prefix' => 'admin', 'middleware' => 'auth.isAdm
 
     // EventLinks
     Route::resource('eventLinks', EventLinkAdminController::class)->except(['show']);
+
+    // Users
+    Route::get('users', [UserAdminController::class, 'index'])->name('users.index');
+    Route::post('users/{user}/toggle-admin', [UserAdminController::class, 'toggleAdmin'])->name('users.toggleAdmin');
 
     // Faq
     Route::resource('faq', FaqAdminController::class)->except('show');

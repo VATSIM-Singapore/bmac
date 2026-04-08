@@ -79,6 +79,9 @@
                                 <a class="dropdown-item {{ request()->routeIs('admin.airlines*') ? 'active' : '' }}"
                                    href="{{ route('admin.airlines.index') }}">{{ __('Airlines') }}</a>
                                 <div class="dropdown-divider"></div>
+                                <a class="dropdown-item {{ request()->routeIs('admin.users*') ? 'active' : '' }}"
+                                    href="{{ route('admin.users.index') }}">{{ __('Users') }}</a>
+                                <div class="dropdown-divider"></div>
                                 <a class="dropdown-item {{ request()->routeIs('admin.faq*') ? 'active' : '' }}"
                                     href="{{ route('admin.faq.index') }}">{{ __('FAQ') }}</a>
                             </div>

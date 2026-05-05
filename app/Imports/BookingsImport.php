@@ -132,8 +132,8 @@ class BookingsImport implements ToModel, WithHeadingRow, WithBatchInserts, WithC
             'origin'        => 'exists:airports,icao',
             'destination'   => 'exists:airports,icao',
             'airline'       => 'sometimes|nullable|string|max:3',
-            'origin_bay'    => 'sometimes|nullable|string',
-            'destination_bay' => 'sometimes|nullable|string',
+            'origin_bay'    => 'sometimes|nullable',
+            'destination_bay' => 'sometimes|nullable',
             'track'         => 'sometimes|nullable',
             'oceanicFL'     => 'sometimes|nullable|integer:3',
             'aircraft_type' => 'sometimes|nullable|max:4',
@@ -252,13 +252,13 @@ class BookingsImport implements ToModel, WithHeadingRow, WithBatchInserts, WithC
     /**
      * Get bay ID from bay name, with validation and caching
      */
-    private function getBayId(?string $bayName, int $airportId): ?int
+    private function getBayId(mixed $bayName, int $airportId): ?int
     {
-        if (empty($bayName)) {
+        if ($bayName === null || $bayName === '') {
             return null;
         }
 
-        $bayName = trim($bayName);
+        $bayName = trim((string) $bayName);
 
         // Look up bay by name and airport
         $bay = Bay::where('name', $bayName)

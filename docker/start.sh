@@ -1,45 +1,90 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+# ──────────────────────────────────────────────
+# Laravel development container entrypoint.
+# NOTE: php artisan serve is NOT suitable for production.
+# Use nginx + php-fpm for real deployments.
+# ──────────────────────────────────────────────
+set -euo pipefail
 
-# Install composer dependencies if missing
-if [ ! -f "vendor/autoload.php" ]; then
-    echo "Installing Composer dependencies..."
-    composer install --no-interaction
+# ──────────────────────────────────────────────
+# Helpers
+# ──────────────────────────────────────────────
+log()  { echo "[entrypoint] $*"; }
+fail() { echo "[entrypoint] ERROR: $*" >&2; exit 1; }
+
+MAX_DB_RETRIES=30
+RETRY_INTERVAL=3
+
+# ──────────────────────────────────────────────
+# Pre-flight checks
+# ──────────────────────────────────────────────
+[ -f .env ] || fail ".env file not found"
+
+# ──────────────────────────────────────────────
+# Composer dependencies
+# ──────────────────────────────────────────────
+if [ ! -f vendor/autoload.php ]; then
+    log "Installing Composer dependencies..."
+    composer install --no-interaction --no-progress --prefer-dist
 fi
 
-# Generate application key if not set
-if ! grep -q "^APP_KEY=." .env 2>/dev/null; then
-    echo "Generating application key..."
+# ──────────────────────────────────────────────
+# Application key
+# ──────────────────────────────────────────────
+if ! grep -q "^APP_KEY=." .env; then
+    log "Generating application key..."
     php artisan key:generate --force
 fi
 
-# Wait for database to be ready
-echo "Waiting for database..."
+# ──────────────────────────────────────────────
+# Wait for database (with timeout)
+# ──────────────────────────────────────────────
+log "Waiting for database..."
+count=0
 until php artisan db:show > /dev/null 2>&1; do
-    sleep 3
+    count=$((count + 1))
+    if [ "$count" -ge "$MAX_DB_RETRIES" ]; then
+        fail "Database not ready after $((MAX_DB_RETRIES * RETRY_INTERVAL))s — aborting"
+    fi
+    log "  Database not ready, retrying in ${RETRY_INTERVAL}s... ($count/$MAX_DB_RETRIES)"
+    sleep "$RETRY_INTERVAL"
 done
-echo "Database is ready."
+log "Database is ready."
 
-# Run migrations
-echo "Running migrations..."
+# ──────────────────────────────────────────────
+# Migrations & storage link
+# ──────────────────────────────────────────────
+log "Running migrations..."
 php artisan migrate --force
 
-# Create storage link
-php artisan storage:link --force
+if [ ! -L public/storage ]; then
+    log "Creating storage link..."
+    php artisan storage:link --force
+fi
 
-# Install and build frontend assets
-echo "Installing npm dependencies..."
-npm ci
-echo "Building frontend assets..."
+# ──────────────────────────────────────────────
+# Frontend assets
+# ──────────────────────────────────────────────
+if [ ! -d node_modules ]; then
+    log "Installing npm dependencies..."
+    npm ci
+fi
+
+log "Building frontend assets..."
 npm run dev
 
-# Run one-time setup commands
-if [ ! -f ".setup_complete" ]; then
-    echo "Running initial data import..."
+# ──────────────────────────────────────────────
+# One-time setup
+# ──────────────────────────────────────────────
+if [ ! -f .setup_complete ]; then
+    log "Running initial data import..."
     php artisan import:airlines
     php artisan seed:wsss-bays
     touch .setup_complete
 fi
 
-# Start the Laravel development server
-php artisan serve --host=0.0.0.0 --port=80
+# ──────────────────────────────────────────────
+# Start server (exec replaces shell — proper PID 1)
+# ──────────────────────────────────────────────
+log "Starting Laravel development server on port 80..."
+exec php artisan serve --host=0.0.0.0 --port=80

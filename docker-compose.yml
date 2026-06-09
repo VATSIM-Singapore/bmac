@@ -1,21 +1,16 @@
 services:
     laravel.test:
         build:
-            context: ./vendor/laravel/sail/runtimes/8.3
+            context: .
             dockerfile: Dockerfile
-            args:
-                WWWGROUP: '${WWWGROUP}'
-        image: sail-8.3/app
         extra_hosts:
             - 'host.docker.internal:host-gateway'
         ports:
             - '${APP_PORT:-8765}:80'
-            - '${VITE_PORT:-5173}:${VITE_PORT:-5173}'
         environment:
-            WWWUSER: '${WWWUSER}'
-            LARAVEL_SAIL: 1
-            XDEBUG_MODE: '${SAIL_XDEBUG_MODE:-off}'
-            XDEBUG_CONFIG: '${SAIL_XDEBUG_CONFIG:-client_host=host.docker.internal}'
+            WWWUSER: '1000'
+            XDEBUG_MODE: '${XDEBUG_MODE:-off}'
+            XDEBUG_CONFIG: '${XDEBUG_CONFIG:-client_host=host.docker.internal}'
             IGNITION_LOCAL_SITES_PATH: '${PWD}'
         volumes:
             - '.:/var/www/html'
@@ -27,16 +22,8 @@ services:
             limits:
               memory: 250m
         depends_on:
-            # - mailpit
             - redis
             - mariadb
-    # mailpit:
-    #     image: 'axllent/mailpit:latest'
-    #     ports:
-    #         - '${FORWARD_MAILPIT_PORT:-1025}:1025'
-    #         - '${FORWARD_MAILPIT_DASHBOARD_PORT:-8025}:8025'
-    #     networks:
-    #         - sail
     redis:
         image: 'redis:alpine'
         ports:
@@ -70,7 +57,6 @@ services:
             MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
         volumes:
             - 'sail-mariadb:/var/lib/mysql'
-            - './vendor/laravel/sail/database/mysql/create-testing-database.sh:/docker-entrypoint-initdb.d/10-create-testing-database.sh'
         networks:
             sinvacc-bridge:
               ipv4_address: 10.0.2.3

@@ -52,9 +52,11 @@ ENV BOOTSTRAP_COLOR_PRIMARY=${BOOTSTRAP_COLOR_PRIMARY} \
     BOOTSTRAP_COLOR_DANGER=${BOOTSTRAP_COLOR_DANGER}
 COPY package.json package-lock.json ./
 RUN npm ci
-COPY resources ./resources
-COPY webpack.mix.js ./
-COPY .env.example ./.env
+# Copy the full application context. Laravel Mix only sets its public path to
+# "public" when it detects a Laravel app (laravel-mix sees ./artisan); without
+# artisan, mix.version() resolves "/public/..." against the filesystem root and
+# fails with ENOENT. This stage only contributes public/js|css|mix-manifest.json.
+COPY . .
 RUN npm run build
 
 # ──────────────────────────────────────────────

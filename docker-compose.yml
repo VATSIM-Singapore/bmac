@@ -1,38 +1,104 @@
+# ──────────────────────────────────────────────
+# BMAC compose (single source of truth).
+#
+# Pulls the image built by GitHub Actions (GHCR) and keeps all state
+# on host bind mounts, so data survives image updates.
+#
+#   docker login ghcr.io -u <user> -p <PAT>        # skip if package is public
+#   docker compose pull
+#   docker compose up -d
+#
+# Set BMAC_IMAGE in .env to your image, e.g.
+#   BMAC_IMAGE=ghcr.io/vatsim-singapore/bmac:latest
+#
+# All services join the external `sinvacc-bridge` network with a static
+# address inside 10.2.2.0/24.
+# ──────────────────────────────────────────────
+
+# Shared configuration for the app, queue worker and scheduler.
+x-app: &app
+    image: '${BMAC_IMAGE:-ghcr.io/vatsim-singapore/bmac:latest}'
+    environment:
+        APP_ENV: production
+        APP_DEBUG: 'false'
+        DB_HOST: mariadb
+        DB_PORT: 3306
+        REDIS_HOST: redis
+        CACHE_DRIVER: redis
+        SESSION_DRIVER: redis
+        QUEUE_CONNECTION: redis
+    volumes:
+        # ── application state (host bind mounts) ──
+        - './storage:/var/www/html/storage'
+        - './.env:/var/www/html/.env'
+        # - './database:/var/www/html/database'                # only if DB_CONNECTION=sqlite
+        # - './bootstrap/cache:/var/www/html/bootstrap/cache'  # optional
+
 services:
-    laravel.test:
-        build:
-            context: .
-            dockerfile: Dockerfile
+    bmac:
+        <<: *app
+        container_name: bmac
         extra_hosts:
             - 'host.docker.internal:host-gateway'
         ports:
             - '${APP_PORT:-8765}:80'
-        environment:
-            WWWUSER: '1000'
-            XDEBUG_MODE: '${XDEBUG_MODE:-off}'
-            XDEBUG_CONFIG: '${XDEBUG_CONFIG:-client_host=host.docker.internal}'
-            IGNITION_LOCAL_SITES_PATH: '${PWD}'
-        volumes:
-            - '.:/var/www/html'
         networks:
             sinvacc-bridge:
-              ipv4_address: 10.0.2.1
-        deploy:
-          resources:
-            limits:
-              memory: 250m
+                ipv4_address: 10.2.2.1
         depends_on:
-            - redis
-            - mariadb
+            redis:
+                condition: service_healthy
+            mariadb:
+                condition: service_healthy
+        deploy:
+            resources:
+                limits:
+                    memory: 250m
+
+    # Processes queued notifications/jobs (booking e-mails, imports, ...).
+    worker:
+        <<: *app
+        container_name: bmac-worker
+        command: ['php', 'artisan', 'horizon']
+        networks:
+            sinvacc-bridge:
+                ipv4_address: 10.2.2.5
+        depends_on:
+            bmac:
+                condition: service_healthy
+        healthcheck:
+            disable: true
+        deploy:
+            resources:
+                limits:
+                    memory: 250m
+
+    # Runs the application scheduler (reservation cleanup, pruning, ...).
+    scheduler:
+        <<: *app
+        container_name: bmac-scheduler
+        command: ['php', 'artisan', 'schedule:work']
+        networks:
+            sinvacc-bridge:
+                ipv4_address: 10.2.2.6
+        depends_on:
+            bmac:
+                condition: service_healthy
+        healthcheck:
+            disable: true
+        deploy:
+            resources:
+                limits:
+                    memory: 100m
+
     redis:
         image: 'redis:alpine'
-        ports:
-            - '${FORWARD_REDIS_PORT:-6379}:6379'
+        command: ['redis-server', '--appendonly', 'yes']
         volumes:
-            - 'sail-redis:/data'
+            - './data/redis:/data'
         networks:
             sinvacc-bridge:
-              ipv4_address: 10.0.2.2
+                ipv4_address: 10.2.2.2
         healthcheck:
             test:
                 - CMD
@@ -41,29 +107,23 @@ services:
             retries: 3
             timeout: 5s
         deploy:
-          resources:
-            limits:
-              memory: 50m
+            resources:
+                limits:
+                    memory: 50m
+
     mariadb:
         image: 'mariadb:10'
-        ports:
-            - '${FORWARD_DB_PORT:-3306}:3306'
         environment:
             MYSQL_ROOT_PASSWORD: '${DB_PASSWORD}'
             MYSQL_ROOT_HOST: '%'
             MYSQL_DATABASE: '${DB_DATABASE}'
             MYSQL_USER: '${DB_USERNAME}'
             MYSQL_PASSWORD: '${DB_PASSWORD}'
-            MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
         volumes:
-            - 'sail-mariadb:/var/lib/mysql'
+            - './data/mariadb:/var/lib/mysql'
         networks:
             sinvacc-bridge:
-              ipv4_address: 10.0.2.3
-        deploy:
-          resources:
-            limits:
-              memory: 250m
+                ipv4_address: 10.2.2.3
         healthcheck:
             test:
                 - CMD
@@ -72,22 +132,23 @@ services:
                 - '-p${DB_PASSWORD}'
             retries: 3
             timeout: 5s
+        deploy:
+            resources:
+                limits:
+                    memory: 250m
+
+    # Local-only DB admin UI; not published outside the host.
     phpmyadmin:
         image: phpmyadmin
         restart: always
         ports:
-            - 8080:80
+            - '127.0.0.1:8080:80'
         environment:
-            - PMA_ARBITRARY=1
+            - PMA_HOST=mariadb
         networks:
             sinvacc-bridge:
-              ipv4_address: 10.0.2.4
+                ipv4_address: 10.2.2.4
 
 networks:
     sinvacc-bridge:
-      external: true
-volumes:
-    sail-redis:
-        driver: local
-    sail-mariadb:
-        driver: local
+        external: true

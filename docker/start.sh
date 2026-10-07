@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────
-# Laravel development container entrypoint.
-# NOTE: php artisan serve is NOT suitable for production.
-# Use nginx + php-fpm for real deployments.
+# Container entrypoint.
+# State (storage, .env, database) lives on host bind mounts.
+# NOTE: php artisan serve is a development server.
+# Use nginx + php-fpm (or Octane) for real deployments.
 # ──────────────────────────────────────────────
 set -euo pipefail
 
@@ -12,24 +13,24 @@ set -euo pipefail
 log()  { echo "[entrypoint] $*"; }
 fail() { echo "[entrypoint] ERROR: $*" >&2; exit 1; }
 
-MAX_DB_RETRIES=30
-RETRY_INTERVAL=3
+MAX_DB_RETRIES="${MAX_DB_RETRIES:-30}"
+RETRY_INTERVAL="${RETRY_INTERVAL:-3}"
 
 # ──────────────────────────────────────────────
 # Pre-flight checks
 # ──────────────────────────────────────────────
-[ -f .env ] || fail ".env file not found"
+[ -f .env ] || fail ".env not found — bind-mount it or create it on the host"
+
+# Bind mounts are NOT seeded from the image: make sure the storage skeleton exists.
+mkdir -p \
+    storage/app/public \
+    storage/framework/cache/data \
+    storage/framework/sessions \
+    storage/framework/views \
+    storage/logs
 
 # ──────────────────────────────────────────────
-# Composer dependencies
-# ──────────────────────────────────────────────
-if [ ! -f vendor/autoload.php ]; then
-    log "Installing Composer dependencies..."
-    composer install --no-interaction --no-progress --prefer-dist
-fi
-
-# ──────────────────────────────────────────────
-# Application key
+# Application key (written to the bind-mounted .env, so it persists)
 # ──────────────────────────────────────────────
 if ! grep -q "^APP_KEY=." .env; then
     log "Generating application key..."
@@ -39,7 +40,7 @@ fi
 # ──────────────────────────────────────────────
 # Wait for database (with timeout)
 # ──────────────────────────────────────────────
-log "Waiting for database..."
+log "Waiting for database at ${DB_HOST:-mariadb}..."
 count=0
 until php artisan db:show > /dev/null 2>&1; do
     count=$((count + 1))
@@ -63,25 +64,27 @@ if [ ! -L public/storage ]; then
 fi
 
 # ──────────────────────────────────────────────
-# Frontend assets
+# One-time setup.
+# Runs BEFORE config:cache so the QUEUE_CONNECTION override below takes effect.
+# The sentinel is only written once the critical import has succeeded; a failed
+# import aborts the container (via `set -e`) so it is retried on the next boot.
 # ──────────────────────────────────────────────
-if [ ! -d node_modules ]; then
-    log "Installing npm dependencies..."
-    npm ci
-fi
-
-log "Building frontend assets..."
-npm run dev
-
-# ──────────────────────────────────────────────
-# One-time setup
-# ──────────────────────────────────────────────
-if [ ! -f .setup_complete ]; then
+if [ ! -f storage/.setup_complete ]; then
     log "Running initial data import..."
-    php artisan import:airlines
-    php artisan seed:wsss-bays
-    touch .setup_complete
+    # Critical: run synchronously so it completes before we continue.
+    QUEUE_CONNECTION=sync php artisan import:airlines
+    # Optional: only applies when the WSSS airport is present in the database.
+    php artisan seed:wsss-bays || log "WARNING: seed:wsss-bays skipped (WSSS airport not present)"
+    touch storage/.setup_complete
 fi
+
+# ──────────────────────────────────────────────
+# Cache config/routes/views for production
+# ──────────────────────────────────────────────
+log "Caching configuration..."
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
 
 # ──────────────────────────────────────────────
 # Start server (exec replaces shell — proper PID 1)

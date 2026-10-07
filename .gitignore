@@ -11,6 +11,7 @@
 /public/mix-manifest.json
 /storage/*.key
 /vendor
+/data
 /.idea
 /.vscode
 /.vagrant

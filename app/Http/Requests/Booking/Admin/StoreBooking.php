@@ -19,7 +19,6 @@ class StoreBooking extends Request
             'is_editable' => 'required|boolean',
             'callsign' => 'nullable|alpha_num|between:4,7',
             'acType' => 'nullable|alpha_num|between:3,4',
-            'airline_id' => 'nullable|exists:airlines,id',
             'ctot' => 'sometimes|nullable',
             'eta' => 'sometimes|nullable',
             'route' => 'sometimes|nullable',
@@ -30,24 +29,6 @@ class StoreBooking extends Request
             'separation' => 'sometimes|numeric|min:1',
             'oceanicFL' => 'sometimes|nullable|integer:3',
             'notes' => 'nullable',
-            'dep_bay' => [
-                'sometimes',
-                'nullable',
-                function ($attribute, $value, $fail) {
-                    if (!empty($value) && !\App\Models\Bay::where('id', $value)->exists()) {
-                        $fail('The selected ' . $attribute . ' is invalid.');
-                    }
-                },
-            ],
-            'arr_bay' => [
-                'sometimes',
-                'nullable',
-                function ($attribute, $value, $fail) {
-                    if (!empty($value) && !\App\Models\Bay::where('id', $value)->exists()) {
-                        $fail('The selected ' . $attribute . ' is invalid.');
-                    }
-                },
-            ],
         ];
     }
 
@@ -64,7 +45,6 @@ class StoreBooking extends Request
             'is_editable' => __('Editable?'),
             'callsign' => __('Callsign'),
             'acType' => __('Aircraft code'),
-            'airline_id' => __('Airline'),
             'ctot' => __('CTOT'),
             'eta' => __('ETA'),
             'route' => __('Route'),
@@ -75,9 +55,6 @@ class StoreBooking extends Request
             'separation' => __('Separation (in minutes)'),
             'oceanicFL' => __('Oceanic Entry Level') . ' / ' . __('Cruise FL'),
             'notes' => __('Notes'),
-            'dep_bay' => __('Departure Bay'),
-            'arr_bay' => __('Arrival Bay'),
         ];
     }
-
 }

@@ -12,8 +12,6 @@ use App\Events\BookingCancelled;
 use App\Events\BookingConfirmed;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Booking\UpdateBooking;
-use App\Services\CachedDataService;
-use App\Services\RealFlightBookingValidator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 
@@ -48,10 +46,7 @@ class BookingController extends Controller
                     return view('booking.edit_multiflights', compact('booking'));
                 }
                 $flight = $booking->flights->first();
-                $booking->load('airline'); // Ensure airline relationship is loaded
-                $cachedDataService = new CachedDataService();
-                $airlines = $cachedDataService->getAirlinesForSelect();
-                return view('booking.edit', compact('booking', 'flight', 'airlines'));
+                return view('booking.edit', compact('booking', 'flight'));
             } else {
                 // Check if the booking has already been reserved
                 if ($booking->status == BookingStatus::RESERVED) {
@@ -97,18 +92,6 @@ class BookingController extends Controller
                 // Check if you are allowed to reserve the slot
                 if ($booking->event->startBooking <= now()) {
                     if ($booking->event->endBooking >= now()) {
-                        // Validate Real Flight Operations booking restrictions
-                        $flight = $booking->flights->first();
-                        if ($flight) {
-                            $validator = new RealFlightBookingValidator();
-                            $validationResult = $validator->validateBooking(auth()->user(), $booking->event, $flight);
-
-                            if (!$validationResult->isSuccess()) {
-                                flashMessage('danger', __('Booking Restricted'), $validationResult->errorMessage);
-                                return to_route('bookings.event.index', $booking->event);
-                            }
-                        }
-
                         activity()
                             ->by(auth()->user())
                             ->on($booking)
@@ -124,10 +107,7 @@ class BookingController extends Controller
                             return view('booking.edit_multiflights', compact('booking'));
                         }
                         $flight = $booking->flights->first();
-                        $booking->load('airline'); // Ensure airline relationship is loaded
-                        $cachedDataService = new CachedDataService();
-                        $airlines = $cachedDataService->getAirlinesForSelect();
-                        return view('booking.edit', compact('booking', 'flight', 'airlines'));
+                        return view('booking.edit', compact('booking', 'flight'));
                     } else {
                         flashMessage(
                             'danger',
@@ -152,17 +132,10 @@ class BookingController extends Controller
     {
         // This check should actually be in the policy, but is now here as a quick fix
         if ($booking->user_id === $request->user()->id) {
-            // Handle empty airline_id before processing
-            $airline_id = $request->airline_id;
-            if ($airline_id === '') {
-                $airline_id = null;
-            }
-
             if ($booking->is_editable) {
                 $booking->fill([
                     'callsign' => $request->callsign,
-                    'acType' => $request->acType,
-                    'airline_id' => $airline_id
+                    'acType' => $request->acType
                 ]);
             }
 
@@ -174,18 +147,6 @@ class BookingController extends Controller
             }
 
             if ($booking->status == BookingStatus::RESERVED) {
-                // Validate Real Flight Operations booking restrictions on confirmation
-                $flight = $booking->flights->first();
-                if ($flight) {
-                    $validator = new RealFlightBookingValidator();
-                    $validationResult = $validator->validateBooking(auth()->user(), $booking->event, $flight);
-
-                    if (!$validationResult->isSuccess()) {
-                        flashMessage('danger', __('Booking Restricted'), $validationResult->errorMessage);
-                        return to_route('bookings.event.index', $booking->event);
-                    }
-                }
-
                 $booking->status = BookingStatus::BOOKED;
                 $booking->save();
                 event(new BookingConfirmed($booking));

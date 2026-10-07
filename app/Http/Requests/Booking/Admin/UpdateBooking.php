@@ -17,7 +17,6 @@ class UpdateBooking extends Request
             'is_editable' => 'required|boolean',
             'callsign' => 'nullable|alpha_num|max:7',
             'acType' => 'nullable|alpha_num|between:3,4',
-            'airline_id' => 'nullable|exists:airlines,id',
             'ctot' => 'present|nullable|date_format:H:i',
             'eta' => 'present|nullable|date_format:H:i',
             'dep' => 'nullable|exists:airports,id',
@@ -27,25 +26,7 @@ class UpdateBooking extends Request
             'oceanicTrack' => 'nullable|alpha|min:1|max:2',
             'notes' => 'nullable',
             'message' => 'nullable',
-            'notify_user' => 'nullable',
-            'dep_bay' => [
-                'present',
-                'nullable',
-                function ($attribute, $value, $fail) {
-                    if (!empty($value) && !\App\Models\Bay::where('id', $value)->exists()) {
-                        $fail('The selected ' . $attribute . ' is invalid.');
-                    }
-                },
-            ],
-            'arr_bay' => [
-                'present',
-                'nullable',
-                function ($attribute, $value, $fail) {
-                    if (!empty($value) && !\App\Models\Bay::where('id', $value)->exists()) {
-                        $fail('The selected ' . $attribute . ' is invalid.');
-                    }
-                },
-            ],
+            'notify_user' => 'nullable'
         ];
     }
 
@@ -60,7 +41,6 @@ class UpdateBooking extends Request
             'is_editable' => __('Editable?'),
             'callsign' => __('Callsign'),
             'acType' => __('Aircraft code'),
-            'airline_id' => __('Airline'),
             'ctot' => __('CTOT'),
             'eta' => __('ETA'),
             'dep' => __('Departure airport'),
@@ -69,10 +49,7 @@ class UpdateBooking extends Request
             'oceanicFL' => __('Oceanic Entry Level') . ' / ' . __('Cruise FL'),
             'notes' => __('Notes'),
             'message' => __('Message'),
-            'notify_user' => __('Notify user'),
-            'dep_bay' => __('Departure Bay'),
-            'arr_bay' => __('Arrival Bay'),
+            'notify_user' => __('Notify user')
         ];
     }
-
 }

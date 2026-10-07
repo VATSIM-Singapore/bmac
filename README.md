@@ -195,66 +195,6 @@ run the following command:
     If you're planning on importing flights later on,
     add the airports in first before starting a import.
 
-9. (Optional) If you want to import airline data with logos,
-run the following command:
-
-   ```bash
-     php artisan import:airlines
-   ```
-
-    This command will import airline data from `resources/airlines_data/airlines.csv`
-    and extract airline logos from `resources/airlines_data/logos.zip`.
-    
-    **Requirements:**
-    - `airlines.csv` with columns: ICAO, Name, Callsign (optional)
-    - `logos.zip` containing logo files in ICAO.gif format (e.g., UAE.gif, QFA.gif)
-    
-    **Features:**
-    - Skips airlines that already exist (based on ICAO code)
-    - Automatically sets logo paths for airlines that have corresponding logo files
-    - Extracts logos to `storage/app/public/airlines/` directory
-    - Won't overwrite existing logo files
-    
-    The logos will be accessible via the airline's `logo_url` attribute and displayed
-    in booking forms and other airline-related views.
-
-11. (Optional) If you want to seed WSSS airport bays,
-run the following command:
-
-   ```bash
-     php artisan seed:wsss-bays
-   ```
-
-   This command will seed all Singapore Changi Airport (WSSS) bay data into the database.
-   The command includes 182 bays across all terminals and gate areas.
-   It will automatically check if the WSSS airport exists before proceeding,
-   and will skip any bays that already exist in the database.
-   
-   **Note**: This command requires the WSSS airport to be present in the airports table.
-   If WSSS is not found, the command will display an error and stop execution.
-
-12. (Optional) If you want to populate airline assignments for existing bookings,
-run the following command:
-
-   ```bash
-     php artisan event:populate-booking-airline {eventSlug}
-   ```
-
-   This command automatically assigns airline IDs to bookings based on their callsign ICAO codes.
-   It processes all bookings in the specified event that have callsigns but no assigned airline,
-   extracts the first 3 characters from each callsign as the airline ICAO code,
-   and matches it with the airline database.
-   
-   **Features:**
-   - Validates event existence before processing
-   - Only processes bookings without existing airline assignments
-   - Extracts ICAO from callsign (first 3 characters)
-   - Provides detailed summary of results and failed matches
-   - Skips bookings that already have airlines assigned
-   
-   This is useful for events where bookings were created without airline assignments
-   or when airline data was imported after bookings were made.
-
 ## Queue worker / Laravel Horizon
 
 If you're not using `sync` as `QUEUE_CONNECTION`, you need to run a queue worker,

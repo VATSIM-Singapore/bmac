@@ -1,16 +1,12 @@
 <thead>
     <tr>
-        @if ($event->uses_times)
-            <th scope="row"><abbr title="Scheduled Time of Departure">STD</abbr></th>
-            <th scope="row"><abbr title="Scheduled Time of Arrival">STA</abbr></th>
-        @endif
-            <th scope="row">Flight</th>
         <th scope="row">From</th>
         <th scope="row">To</th>
-        @if ($event->event_type_id == \App\Enums\EventType::REALFLIGHTOPS->value)
-            <th scope="row"><abbr title="Assigned Departure Gate">Dep Bay</abbr></th>
-            <th scope="row"><abbr title="Assigned Arrival Gate">Arr Bay</abbr></th>
+        @if ($event->uses_times)
+            <th scope="row"><abbr title="Calculated Take Off Time">CTOT</abbr></th>
+            <th scope="row"><abbr title="Estimated Time of Arrival">ETA</abbr></th>
         @endif
+        <th scope="row">Callsign</th>
         <th scope="row">Aircraft</th>
         <th scope="row">Book | Available until {{ $event->endBooking->format('d-m-Y H:i') }}z</th>
         @if (auth()->check() && auth()->user()->isAdmin && $event->endEvent >= now())
@@ -25,15 +21,13 @@
     {{-- @TODO Temp fix for events using filter buttons --}}
     @if ($flight)
         {{-- Check if flight belongs to the logged in user --}}
-        <tr class="{{ auth()->check() && $booking->user_id == auth()->id() ? 'table-active' : '' }}"
-            data-std="{{ $booking->event->uses_times ? $flight->formattedCtot : '' }}"
-            data-sta="{{ $booking->event->uses_times ? $flight->formattedEta : '' }}"
-            data-flight="{{ strtolower($booking->formatted_callsign) }}"
-            data-from="{{ strtolower($flight->airportDep->icao) }}"
-            data-to="{{ strtolower($flight->airportArr->icao) }}"
-            data-from-name="{{ strtolower($flight->airportDep->name) }}"
-            data-to-name="{{ strtolower($flight->airportArr->name) }}"
-            data-aircraft="{{ strtolower($booking->formatted_actype) }}">
+        <tr class="{{ auth()->check() && $booking->user_id == auth()->id() ? 'table-active' : '' }}">
+            <td>
+                {!! $flight->airportDep->fullName !!}
+            </td>
+            <td>
+                {!! $flight->airportArr->fullName !!}
+            </td>
             @if ($booking->event->uses_times)
                 <td>
                     {{ $flight->formattedCtot }}
@@ -43,54 +37,7 @@
                 </td>
             @endif
             <td class="{{ auth()->check() && auth()->user()->use_monospace_font ? 'text-monospace' : '' }}">
-                <div class="d-flex align-items-top">
-                    @if($booking->airline && $booking->airline->logo_url)
-                        <img src="{{ $booking->airline->logo_url }}"
-                             alt="{{ $booking->airline->name }} logo"
-                             style="max-height: 20px; max-width: 60px; margin-right: 8px;">
-                    @endif
-                    <div>
-                        <div class="flight-number text-primary font-weight-bold">
-                            {{ $booking->formatted_callsign }}
-                        </div>
-                        @if($booking->airline)
-                            <small class="text-muted">{{ $booking->airline->name }}</small>
-                        @endif
-                    </div>
-                </div>
-            </td>
-            <td>
-                <div class="d-flex align-items-center">
-                    <div>
-                        <div>{{ $flight->airportDep->icao }}</div>
-                        <small class="text-muted">{{ $flight->airportDep->name }}</small>
-                    </div>
-                </div>
-            </td>
-            <td>
-                <div class="d-flex align-items-center">
-                    <div>
-                        <div>{{ $flight->airportArr->icao }}</div>
-                        <small class="text-muted">{{ $flight->airportArr->name }}</small>
-                    </div>
-                </div>
-            </td>
-            @if ($event->event_type_id == \App\Enums\EventType::REALFLIGHTOPS->value)
-                <td class="text-center">
-                    @if ($flight->depBay)
-                        <span class="badge badge-info">{{ $flight->depBay->name }}</span>
-                    @else
-                        <span class="text-muted">-</span>
-                    @endif
-                </td>
-                <td class="text-center">
-                    @if ($flight->arrBay)
-                        <span class="badge badge-warning">{{ $flight->arrBay->name }}</span>
-                    @else
-                        <span class="text-muted">-</span>
-                    @endif
-                </td>
-            @endif
+                {{ $booking->formatted_callsign }}</td>
             <td class="{{ auth()->check() && auth()->user()->use_monospace_font ? 'text-monospace' : '' }}">
                 {{ $booking->formatted_actype }}</td>
             <td>

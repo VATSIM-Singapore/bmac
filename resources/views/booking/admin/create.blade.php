@@ -31,7 +31,6 @@
                         @if (!$bulk)
                             <x-form-input name="callsign" :label="__('Callsign')" maxlength="7" />
                             <x-form-input name="acType" :label="__('Aircraft code')" minlength="3" maxlength="4" />
-                            <x-form-select name="airline_id" :label="__('Airline (optional)')" :options="$airlines" :placeholder="__('Choose airline...')" />
                         @endif
 
                         <x-form-select name="dep" :label="__('Departure airport')" :options="$airports"
@@ -39,14 +38,6 @@
 
                         <x-form-select name="arr" :label="__('Arrival airport')" :options="$airports"
                             :placeholder="__('Choose...')" required :default="$event->dep" />
-
-                        @if ($event->event_type_id == \App\Enums\EventType::REALFLIGHTOPS->value)
-                            <x-form-select name="dep_bay" :label="__('Departure Bay (Optional)')" :options="['' => '-- No Bay --']"
-                                id="dep_bay_select" />
-
-                            <x-form-select name="arr_bay" :label="__('Arrival Bay (Optional)')" :options="['' => '-- No Bay --']"
-                                id="arr_bay_select" />
-                        @endif
 
                         @if ($bulk)
                             <x-form-group inline>
@@ -67,12 +58,12 @@
                         @else
                             <x-form-group inline>
                                 <x-form-input name="ctot" type="time"
-                                    :label="'<i class=\'fa fa-clock\'></i> ' . __('STD')">
+                                    :label="'<i class=\'fa fa-clock\'></i> ' . __('CTOT')">
                                     @slot('append')
                                         z
                                     @endslot
                                 </x-form-input>
-                                <x-form-input name="eta" type="time" :label="'<i class=\'fa fa-clock\'></i> ' . __('STA')">
+                                <x-form-input name="eta" type="time" :label="'<i class=\'fa fa-clock\'></i> ' . __('ETA')">
                                     @slot('append')
                                         z
                                     @endslot
@@ -106,69 +97,5 @@
                 </div>
             </div>
         </div>
-
-
     </div>
-
-    @if ($event->event_type_id == \App\Enums\EventType::REALFLIGHTOPS->value)
-        @push('scripts')
-        <script>
-            document.addEventListener('DOMContentLoaded', function() {
-                const depAirportSelect = document.querySelector('select[name="dep"]');
-                const arrAirportSelect = document.querySelector('select[name="arr"]');
-                const depBaySelect = document.getElementById('dep_bay_select');
-                const arrBaySelect = document.getElementById('arr_bay_select');
-
-                function loadBays(airportId, baySelect) {
-                    if (!airportId) {
-                        baySelect.innerHTML = '<option value="">-- No Bay --</option>';
-                        return;
-                    }
-
-                    // Get event ID from the hidden input
-                    const eventId = document.querySelector('input[name="id"]').value;
-                    const url = `/api/bays/by-airport?airport_id=${airportId}${eventId ? `&event_id=${eventId}` : ''}`;
-
-                    fetch(url)
-                        .then(response => response.json())
-                        .then(bays => {
-                            baySelect.innerHTML = '<option value="">-- No Bay --</option>';
-                            bays.forEach(bay => {
-                                const option = document.createElement('option');
-                                option.value = bay.id;
-                                option.textContent = bay.name;
-                                baySelect.appendChild(option);
-                            });
-                        })
-                        .catch(error => {
-                            console.error('Error loading bays:', error);
-                            baySelect.innerHTML = '<option value="">Error loading bays</option>';
-                        });
-                }
-
-                if (depAirportSelect && depBaySelect) {
-                    depAirportSelect.addEventListener('change', function() {
-                        loadBays(this.value, depBaySelect);
-                    });
-
-                    // Load bays if airport is already selected
-                    if (depAirportSelect.value) {
-                        loadBays(depAirportSelect.value, depBaySelect);
-                    }
-                }
-
-                if (arrAirportSelect && arrBaySelect) {
-                    arrAirportSelect.addEventListener('change', function() {
-                        loadBays(this.value, arrBaySelect);
-                    });
-
-                    // Load bays if airport is already selected
-                    if (arrAirportSelect.value) {
-                        loadBays(arrAirportSelect.value, arrBaySelect);
-                    }
-                }
-            });
-        </script>
-        @endpush
-    @endif
 @endsection

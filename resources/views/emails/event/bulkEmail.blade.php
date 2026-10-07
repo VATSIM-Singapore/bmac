@@ -7,5 +7,5 @@ Dear **{{ $full_name }}**,
 
 @lang('Regards'),
 
-**The SINvACC Team**
+**{{ config('mail.from.name', config('app.name')) }}**
 @endcomponent

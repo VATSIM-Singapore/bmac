@@ -5,11 +5,7 @@ namespace App\Imports;
 use App\Enums\EventType;
 use App\Models\Event;
 use App\Models\Airport;
-use App\Models\Airline;
-use App\Models\Bay;
 use App\Models\Booking;
-use App\Services\CachedDataService;
-use App\Services\BayAssignmentService;
 use Maatwebsite\Excel\Concerns\ToModel;
 use PhpOffice\PhpSpreadsheet\Shared\Date;
 use Maatwebsite\Excel\Concerns\Importable;
@@ -17,21 +13,14 @@ use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Concerns\WithValidation;
 use Maatwebsite\Excel\Concerns\WithBatchInserts;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
-use Illuminate\Support\Collection;
 
 class BookingsImport implements ToModel, WithHeadingRow, WithBatchInserts, WithChunkReading, WithValidation
 {
     use Importable;
 
-    private Collection $airlinesCache;
-    private array $invalidAirlines = [];
-    private array $invalidBays = [];
-
     public function __construct(public Event $event)
     {
-        // Load airlines cache for fast lookup
-        $cachedDataService = new CachedDataService();
-        $this->airlinesCache = $cachedDataService->getAirlinesForSelect();
+        //
     }
 
     /**
@@ -45,16 +34,11 @@ class BookingsImport implements ToModel, WithHeadingRow, WithBatchInserts, WithC
         if (!empty($row['call_sign']) && !empty($row['aircraft_type'])) {
             $editable = false;
         }
-
-        // Handle airline ICAO code
-        $airlineId = $this->getAirlineId($row['airline'] ?? null);
-
         $booking = Booking::create([
             'event_id' => $this->event->id,
             'is_editable' => $editable,
             'callsign' => $row['call_sign'] ?? null,
             'acType'   => $row['aircraft_type'] ?? null,
-            'airline_id' => $airlineId,
         ]);
 
         if ($this->event->event_type_id == EventType::MULTIFLIGHTS->value) {
@@ -79,10 +63,6 @@ class BookingsImport implements ToModel, WithHeadingRow, WithBatchInserts, WithC
                 ],
             ]);
         } else {
-            // Get bay assignments
-            $depBayId = $this->getBayId($row['origin_bay'] ?? null, $this->getAirport($row['origin']));
-            $arrBayId = $this->getBayId($row['destination_bay'] ?? null, $this->getAirport($row['destination']));
-
             $flight = collect([
                 'dep'          => $this->getAirport($row['origin']),
                 'arr'          => $this->getAirport($row['destination']),
@@ -92,20 +72,8 @@ class BookingsImport implements ToModel, WithHeadingRow, WithBatchInserts, WithC
                 'oceanicTrack' => $row['track'] ?? null,
                 'oceanicFL'    => $row['fl'] ?? null,
                 'route'        => $row['route'] ?? null,
-                'dep_bay'      => $depBayId,
-                'arr_bay'      => $arrBayId,
             ]);
-            $flight = $booking->flights()->create($flight->toArray());
-
-            // Apply bay assignment timing calculations if bays are assigned
-            if ($depBayId || $arrBayId) {
-                $bayAssignmentService = new BayAssignmentService();
-                $bayAssignmentService->applyBayAssignments($flight, $this->event, [
-                    'dep_bay' => $depBayId,
-                    'arr_bay' => $arrBayId
-                ]);
-                $flight->save();
-            }
+            $booking->flights()->create($flight->toArray());
         }
     }
 
@@ -131,9 +99,6 @@ class BookingsImport implements ToModel, WithHeadingRow, WithBatchInserts, WithC
         return [
             'origin'        => 'exists:airports,icao',
             'destination'   => 'exists:airports,icao',
-            'airline'       => 'sometimes|nullable|string|max:3',
-            'origin_bay'    => 'sometimes|nullable',
-            'destination_bay' => 'sometimes|nullable',
             'track'         => 'sometimes|nullable',
             'oceanicFL'     => 'sometimes|nullable|integer:3',
             'aircraft_type' => 'sometimes|nullable|max:4',
@@ -157,142 +122,5 @@ class BookingsImport implements ToModel, WithHeadingRow, WithBatchInserts, WithC
             return $time;
         }
         return null;
-    }
-
-    /**
-     * Get airline ID from ICAO code, with validation and caching
-     */
-    private function getAirlineId(?string $icao): ?int
-    {
-        if (empty($icao)) {
-            return null;
-        }
-
-        $icao = strtoupper(trim($icao));
-
-        // Check if airline exists in cache
-        foreach ($this->airlinesCache as $id => $displayName) {
-            if ($id === '') {
-                continue;
-            } // Skip "No airline" option
-
-            // Extract ICAO from display name (format: "ICAO | Name")
-            $cachedIcao = explode(' | ', $displayName)[0] ?? '';
-            if ($cachedIcao === $icao) {
-                return (int) $id;
-            }
-        }
-
-        // If not found in cache, try database lookup
-        $airline = Airline::where('icao', $icao)->first();
-        if ($airline) {
-            return $airline->id;
-        }
-
-        // Airline not found - add to invalid list for warning
-        if (!in_array($icao, $this->invalidAirlines)) {
-            $this->invalidAirlines[] = $icao;
-        }
-
-        return null; // Set to null (no airline)
-    }
-
-    /**
-     * Validate airline ICAO code without creating booking
-     */
-    public function validateAirline(?string $icao): void
-    {
-        if (empty($icao)) {
-            return;
-        }
-
-        $icao = strtoupper(trim($icao));
-
-        // Check if airline exists in cache
-        foreach ($this->airlinesCache as $id => $displayName) {
-            if ($id === '') {
-                continue;
-            } // Skip "No airline" option
-
-            // Extract ICAO from display name (format: "ICAO | Name")
-            $cachedIcao = explode(' | ', $displayName)[0] ?? '';
-            if ($cachedIcao === $icao) {
-                return; // Valid airline found
-            }
-        }
-
-        // If not found in cache, try database lookup
-        $airline = Airline::where('icao', $icao)->first();
-        if ($airline) {
-            return; // Valid airline found
-        }
-
-        // Airline not found - add to invalid list for warning
-        if (!in_array($icao, $this->invalidAirlines)) {
-            $this->invalidAirlines[] = $icao;
-        }
-    }
-
-    /**
-     * Get list of invalid airlines found during import
-     */
-    public function getInvalidAirlines(): array
-    {
-        return $this->invalidAirlines;
-    }
-
-    /**
-     * Check if there are any invalid airlines
-     */
-    public function hasInvalidAirlines(): bool
-    {
-        return !empty($this->invalidAirlines);
-    }
-
-    /**
-     * Get bay ID from bay name, with validation and caching
-     */
-    private function getBayId(mixed $bayName, int $airportId): ?int
-    {
-        if ($bayName === null || $bayName === '') {
-            return null;
-        }
-
-        $bayName = trim((string) $bayName);
-
-        // Look up bay by name and airport
-        $bay = Bay::where('name', $bayName)
-                  ->where('airport_id', $airportId)
-                  ->first();
-
-        if ($bay) {
-            return $bay->id;
-        }
-
-        // Bay not found - add to invalid list for warning with airport ICAO
-        $airport = Airport::find($airportId);
-        $airportDisplay = $airport ? $airport->icao : 'Unknown Airport';
-        $invalidBayKey = $bayName . ' (Airport: ' . $airportDisplay . ')';
-        if (!in_array($invalidBayKey, $this->invalidBays)) {
-            $this->invalidBays[] = $invalidBayKey;
-        }
-
-        return null; // Set to null (no bay)
-    }
-
-    /**
-     * Get list of invalid bays found during import
-     */
-    public function getInvalidBays(): array
-    {
-        return $this->invalidBays;
-    }
-
-    /**
-     * Check if there are any invalid bays
-     */
-    public function hasInvalidBays(): bool
-    {
-        return !empty($this->invalidBays);
     }
 }

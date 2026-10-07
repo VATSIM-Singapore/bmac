@@ -9,5 +9,4 @@ enum EventType: int
     case FLYIN = 3;
     case GROUPFLIGHT = 4;
     case MULTIFLIGHTS = 5;
-    case REALFLIGHTOPS = 6;
 }

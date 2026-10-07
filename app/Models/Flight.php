@@ -69,10 +69,6 @@ class Flight extends Model
     protected $casts = [
         'ctot' => 'datetime',
         'eta' => 'datetime',
-        'dep_bay_assigned_from' => 'datetime',
-        'dep_bay_assigned_to' => 'datetime',
-        'arr_bay_assigned_from' => 'datetime',
-        'arr_bay_assigned_to' => 'datetime',
     ];
 
     /**
@@ -140,15 +136,5 @@ class Flight extends Model
     public function airportArr(): HasOne
     {
         return $this->hasOne(Airport::class, 'id', 'arr')->withDefault();
-    }
-
-    public function depBay(): BelongsTo
-    {
-        return $this->belongsTo(\App\Models\Bay::class, 'dep_bay');
-    }
-
-    public function arrBay(): BelongsTo
-    {
-        return $this->belongsTo(\App\Models\Bay::class, 'arr_bay');
     }
 }

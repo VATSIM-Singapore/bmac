@@ -20,7 +20,6 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
  * @property string $name_last
  * @property string $email
  * @property bool $isAdmin
- * @property bool $isSuperAdmin
  * @property AirportView $airport_view
  * @property bool $use_monospace_font
  * @property string|null $remember_token
@@ -64,8 +63,7 @@ class User extends Authenticatable
     use Notifiable;
 
     protected $guarded = [
-        'isAdmin',
-        'isSuperAdmin',
+        'isAdmin'
     ];
     /**
      * The attributes that should be hidden for arrays.
@@ -82,7 +80,6 @@ class User extends Authenticatable
      */
     protected $casts = [
         'isAdmin' => 'boolean',
-        'isSuperAdmin' => 'boolean',
         'use_monospace_font' => 'boolean',
         'airport_view' => AirportView::class,
     ];

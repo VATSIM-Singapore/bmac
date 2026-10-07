@@ -21,8 +21,6 @@
 
     @livewireStyles
 
-    @stack('styles')
-
     <!-- Robots -->
     <meta name="robots" content="noindex" />
 

@@ -5,12 +5,10 @@ namespace App\Http\Controllers\Airport;
 use App\Models\Airport;
 use Illuminate\View\View;
 use App\Policies\AirportPolicy;
-use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use App\Http\Controllers\AdminController;
 use App\Http\Requests\Airport\Admin\StoreAirport;
 use App\Http\Requests\Airport\Admin\UpdateAirport;
-use App\Services\CachedDataService;
 
 class AirportAdminController extends AdminController
 {
@@ -19,17 +17,10 @@ class AirportAdminController extends AdminController
         $this->authorizeResource(AirportPolicy::class, 'airport');
     }
 
-    public function index(Request $request): View
+    public function index(): View
     {
-        $query = Airport::with(['flightsDep', 'flightsArr', 'eventDep', 'eventArr']);
-
-        // Filter by ICAO if search term is provided
-        if ($request->filled('icao')) {
-            $query->where('icao', 'LIKE', strtoupper($request->icao) . '%');
-        }
-
-        $airports = $query->paginate(100)->appends($request->query());
-
+        $airports = Airport::with(['flightsDep', 'flightsArr', 'eventDep', 'eventArr'])
+            ->paginate(100);
         return view('airport.admin.overview', compact('airports'));
     }
 
@@ -41,11 +32,6 @@ class AirportAdminController extends AdminController
     public function store(StoreAirport $request): RedirectResponse
     {
         $airport = Airport::create($request->validated());
-
-        // Clear airports cache when new airport is added
-        $cachedDataService = new CachedDataService();
-        $cachedDataService->clearAirportsCache();
-
         flashMessage('success', __('Done'), __(':airport has been added!', ['airport' => "$airport->name [$airport->icao | $airport->iata]"]));
         return to_route('admin.airports.index');
     }
@@ -63,11 +49,6 @@ class AirportAdminController extends AdminController
     public function update(UpdateAirport $request, Airport $airport): RedirectResponse
     {
         $airport->update($request->validated());
-
-        // Clear airports cache when airport is updated
-        $cachedDataService = new CachedDataService();
-        $cachedDataService->clearAirportsCache();
-
         flashMessage('success', __('Done'), __(':airport has been updated!', ['airport' => "$airport->name [$airport->icao | $airport->iata]"]));
 
         return to_route('admin.airports.index');
@@ -77,11 +58,6 @@ class AirportAdminController extends AdminController
     {
         if ($airport->flightsDep->isEmpty() && $airport->flightsArr->isEmpty()) {
             $airport->delete();
-
-            // Clear airports cache when airport is deleted
-            $cachedDataService = new CachedDataService();
-            $cachedDataService->clearAirportsCache();
-
             flashMessage('success', __('Done'), __(':airport has been deleted!', ['airport' => "$airport->name [$airport->icao | $airport->iata]"]));
 
             return redirect()->back();

@@ -3,15 +3,12 @@
 
 Dear **{{ $booking->user->full_name }}**,
 
-Thanks for booking a slot for {{ $booking->event->name }}. Here you can find your slot information:
+Thanks for booking a slot for the {{ $booking->event->name }} event. Here you can find your slot information:
 
 @component('mail::table')
 |  |  |
 |-----------|---------------------------|
-| Callsign: | **{{ $booking->formatted_callsign }}@if($booking->airline && $booking->airline->callsign && $booking->callsign)
-@php
-    $flightNumber = preg_replace('/^' . preg_quote($booking->airline->icao, '/') . '/', '', $booking->callsign);
-@endphp ({{ $booking->airline->callsign }} {{ $flightNumber }})@endif** |
+| Callsign: | **{{ $booking->formatted_callsign }}** |
 | Aircraft: | **{{ $booking->formatted_actype }}** |
 @if($booking->getRawOriginal('selcal') != null)
 | SELCAL: | **{{ $booking->formatted_selcal }}** |
@@ -19,20 +16,14 @@ Thanks for booking a slot for {{ $booking->event->name }}. Here you can find you
 @if($flight->dep)
 | From: | **{{ $flight->airportDep->icao  }}** |
 @endif
-@if($flight->depBay)
-| Departure Bay: | **{{ $flight->depBay->name }}** |
-@endif
 @if($flight->arr)
 | To: | **{{ $flight->airportArr->icao }}** |
 @endif
-@if($flight->arrBay)
-| Arrival Bay: | **{{ $flight->arrBay->name }}** |
-@endif
 @isset($flight->ctot)
-| STD: | **{{ $flight->formattedCtot }}** |
+| CTOT: | **{{ $flight->formattedCtot }}** |
 @endisset
 @isset($flight->eta)
-| STA: | **{{ $flight->formattedEta }}** |
+| ETA: | **{{ $flight->formattedEta }}** |
 @endisset
 @isset($flight->route)
 | Full Route: | **{{ $flight->route }}** |
@@ -58,5 +49,5 @@ We look forward to seeing you in the virtual skies.
 
 @lang('Regards'),
 
-**The SINvACC Team**
+**{{ config('mail.from.name', config('app.name')) }}**
 @endcomponent

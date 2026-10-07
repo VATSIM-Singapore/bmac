@@ -17,13 +17,18 @@
 FROM composer:2 AS vendor
 WORKDIR /app
 COPY composer.json composer.lock ./
+# The floating composer:2 image tracks the newest PHP (currently 8.5), while the
+# app runs on php:8.3-cli. Platform checks here compare against the wrong PHP and
+# the composer image lacks ext-gd/ext-pcntl, so skip them: this stage only produces
+# vendor/ which is executed by the runtime stage that has the correct PHP + extensions.
 RUN composer install \
         --no-dev \
         --no-interaction \
         --no-progress \
         --prefer-dist \
         --optimize-autoloader \
-        --no-scripts
+        --no-scripts \
+        --ignore-platform-reqs
 
 # ──────────────────────────────────────────────
 # Stage 2 — Frontend assets (Laravel Mix)

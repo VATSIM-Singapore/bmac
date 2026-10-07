@@ -17,7 +17,7 @@
 
 # Shared configuration for the app, queue worker and scheduler.
 x-app: &app
-    image: '${BMAC_IMAGE:-ghcr.io/vatsim-singapore/bmac:latest}'
+    image: ghcr.io/vatsim-singapore/bmac:feature-use-docker-commands
     environment:
         APP_ENV: production
         APP_DEBUG: 'false'
@@ -92,7 +92,7 @@ services:
                     memory: 100m
 
     redis:
-        image: 'redis:alpine'
+        image: redis
         command: ['redis-server', '--appendonly', 'yes']
         volumes:
             - './data/redis:/data'
@@ -112,7 +112,7 @@ services:
                     memory: 50m
 
     mariadb:
-        image: 'mariadb:10'
+        image: mariadb:10
         environment:
             MYSQL_ROOT_PASSWORD: '${DB_PASSWORD}'
             MYSQL_ROOT_HOST: '%'

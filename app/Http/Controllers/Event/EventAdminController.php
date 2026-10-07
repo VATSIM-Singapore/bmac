@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Event;
 
 use App\Models\User;
 use App\Models\Event;
-use App\Models\Airport;
 use App\Models\EventType;
 use Illuminate\View\View;
 use App\Enums\BookingStatus;
@@ -19,6 +18,7 @@ use Illuminate\Database\Eloquent\Builder;
 use App\Http\Requests\Event\Admin\SendEmail;
 use App\Http\Requests\Event\Admin\StoreEvent;
 use App\Http\Requests\Event\Admin\UpdateEvent;
+use App\Services\CachedDataService;
 
 class EventAdminController extends AdminController
 {
@@ -38,11 +38,8 @@ class EventAdminController extends AdminController
     public function create(): View
     {
         $event = new Event();
-        $airports = Airport::all(['id', 'icao', 'iata', 'name'])->keyBy('id')
-            ->map(function ($airport) {
-                /** @var Airport $airport */
-                return "$airport->icao | $airport->name | $airport->iata";
-            });
+        $cachedDataService = new CachedDataService();
+        $airports = $cachedDataService->getAirportsForSelect();
         $eventTypes = EventType::all()->pluck('name', 'id');
         return view('event.admin.form', compact('event', 'airports', 'eventTypes'));
     }
@@ -82,11 +79,8 @@ class EventAdminController extends AdminController
 
     public function edit(Event $event): View
     {
-        $airports = Airport::all(['id', 'icao', 'iata', 'name'])->keyBy('id')
-            ->map(function ($airport) {
-                /** @var Airport $airport */
-                return "$airport->icao | $airport->name | $airport->iata";
-            });
+        $cachedDataService = new CachedDataService();
+        $airports = $cachedDataService->getAirportsForSelect();
         $eventTypes = EventType::all()->pluck('name', 'id');
         return view('event.admin.form', compact('event', 'airports', 'eventTypes'));
     }

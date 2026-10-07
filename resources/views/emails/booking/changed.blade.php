@@ -3,7 +3,11 @@
 
 Dear **{{ $booking->user->full_name }}**,
 
-Your booking for the **{{ $booking->event->name }}** event has been amended, please review the changes below:
+Your booking for **{{ $booking->event->name }}** has been amended.
+
+Questions? Ask us on the SINvACC Discord Server, or email us <a href="mailto:realops@sinvacc.org">realops@sinvacc.org</a>
+
+Please review the changes below:
 
 @component('mail::table')
 |  |  |  |
@@ -23,10 +27,10 @@ Your booking for the **{{ $booking->event->name }}** event has been amended, ple
 | ADES: | **{{ \App\Models\Airport::find($change['new'])->icao }}** | (was {{ \App\Models\Airport::find($change['old'])->first()->icao }}) |
 @break
 @case('ctot')
-| CTOT: | **{{ \Carbon\Carbon::parse($change['new'])->format('Hi').'z' }}** | (was {{ \Carbon\Carbon::parse($change['old'])->format('Hi').'z' }}) |
+| STD: | **{{ \Carbon\Carbon::parse($change['new'])->format('Hi').'z' }}** | (was {{ \Carbon\Carbon::parse($change['old'])->format('Hi').'z' }}) |
 @break
 @case('eta')
-| ETA: | **{{ \Carbon\Carbon::parse($change['new'])->format('Hi').'z' }}** | (was {{ \Carbon\Carbon::parse($change['old'])->format('Hi').'z' }}) |
+| STA: | **{{ \Carbon\Carbon::parse($change['new'])->format('Hi').'z' }}** | (was {{ \Carbon\Carbon::parse($change['old'])->format('Hi').'z' }}) |
 @break
 @case('route')
 | Route: | **{{ $change['new'] }}** | (was {{ $change['old'] }}) |
@@ -49,5 +53,5 @@ Your booking for the **{{ $booking->event->name }}** event has been amended, ple
 
 @lang('Regards'),
 
-**{{ config('mail.from.name', config('app.name')) }}**
+**The SINvACC Team**
 @endcomponent

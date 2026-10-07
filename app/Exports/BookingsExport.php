@@ -27,7 +27,7 @@ class BookingsExport implements FromCollection, WithColumnFormatting, WithMappin
      */
     public function collection()
     {
-        return $this->event->bookings()->with('flights')->whereStatus(BookingStatus::BOOKED->value)->get();
+        return $this->event->bookings()->with(['flights.depBay', 'flights.arrBay'])->whereStatus(BookingStatus::BOOKED->value)->get();
     }
 
     public function map($booking): array
@@ -69,6 +69,8 @@ class BookingsExport implements FromCollection, WithColumnFormatting, WithMappin
             $flight->ctot ? Date::dateTimeToExcel($flight->ctot) : null,
             $flight->eta ? Date::dateTimeToExcel($flight->eta) : null,
             $flight->route,
+            $flight->depBay?->name,
+            $flight->arrBay?->name,
         ];
     }
 

@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Booking;
 use Carbon\Carbon;
 use App\Models\Event;
 use App\Models\Flight;
-use App\Models\Airport;
 use App\Models\Booking;
 use Illuminate\View\View;
 use App\Enums\BookingStatus;
@@ -14,6 +13,7 @@ use App\Events\BookingChanged;
 use App\Events\BookingDeleted;
 use App\Exports\BookingsExport;
 use App\Imports\BookingsImport;
+use App\Imports\BookingsValidationImport;
 use App\Policies\BookingPolicy;
 use App\Imports\FlightRouteAssign;
 use Illuminate\Http\RedirectResponse;
@@ -24,6 +24,8 @@ use App\Http\Requests\Booking\Admin\RouteAssign;
 use App\Http\Requests\Booking\Admin\StoreBooking;
 use App\Http\Requests\Booking\Admin\UpdateBooking;
 use App\Http\Requests\Booking\Admin\ImportBookings;
+use App\Services\CachedDataService;
+use App\Services\BayAssignmentService;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class BookingAdminController extends AdminController
@@ -36,17 +38,22 @@ class BookingAdminController extends AdminController
     public function create(Event $event, Request $request): View
     {
         $bulk = $request->bulk;
-        $airports = Airport::all(['id', 'icao', 'iata', 'name'])->keyBy('id')
-            ->map(function ($airport) {
-                /** @var Airport $airport */
-                return "$airport->icao | $airport->name | $airport->iata";
-            });
+        $cachedDataService = new CachedDataService();
 
-        return view('booking.admin.create', compact('event', 'airports', 'bulk'));
+        $airports = $cachedDataService->getAirportsForSelect();
+        $airlines = $cachedDataService->getAirlinesForSelect();
+
+        return view('booking.admin.create', compact('event', 'airports', 'airlines', 'bulk'));
     }
 
     public function store(StoreBooking $request): RedirectResponse
     {
+        // Handle empty airline_id before processing
+        $data = $request->all();
+        if (isset($data['airline_id']) && $data['airline_id'] === '') {
+            $data['airline_id'] = null;
+        }
+
         $event = Event::whereKey($request->id)->first();
         if ($request->bulk) {
             $event_start = Carbon::createFromFormat(
@@ -88,6 +95,7 @@ class BookingAdminController extends AdminController
                 'is_editable' => $request->is_editable,
                 'callsign' => $request->callsign,
                 'acType' => $request->acType,
+                'airline_id' => $data['airline_id'] ?? null,
             ]);
 
             $booking->event()->associate($request->id)->save();
@@ -113,7 +121,19 @@ class BookingAdminController extends AdminController
                 );
             }
 
-            $booking->flights()->create($flightAttributes);
+            $flight = $booking->flights()->create($flightAttributes);
+
+            // Handle bay assignments for real flight ops events
+            if ($event->event_type_id == \App\Enums\EventType::REALFLIGHTOPS->value) {
+                $bayAssignmentService = new BayAssignmentService();
+                $bayAssignmentService->applyBayAssignments($flight, $event, [
+                    'dep_bay' => $request->dep_bay === '' ? null : $request->dep_bay,
+                    'arr_bay' => $request->arr_bay === '' ? null : $request->arr_bay
+                ]);
+            }
+
+            $flight->save();
+
             flashMessage('success', __('Done'), __('Slot created'));
         }
         return to_route('bookings.event.index', $event);
@@ -122,13 +142,27 @@ class BookingAdminController extends AdminController
     public function edit(Booking $booking): View|RedirectResponse
     {
         if ($booking->event->endEvent >= now()) {
-            $airports = Airport::all(['id', 'icao', 'iata', 'name'])->keyBy('id')
-                ->map(function ($airport) {
-                    /** @var Airport $airport */
-                    return "$airport->icao | $airport->name | $airport->iata";
-                });
+            $cachedDataService = new CachedDataService();
+
+            $airports = $cachedDataService->getAirportsForSelect();
+            $airlines = $cachedDataService->getAirlinesForSelect();
+
             $flight = $booking->flights()->first();
-            return view('booking.admin.edit', compact('booking', 'airports', 'flight'));
+            $booking->load('airline'); // Ensure airline relationship is loaded
+
+            // Load bay options for current airports if this is a real flight ops event
+            $depBays = [];
+            $arrBays = [];
+            if ($booking->event->event_type_id == \App\Enums\EventType::REALFLIGHTOPS->value) {
+                if ($flight->dep) {
+                    $depBays = $cachedDataService->getBaysForSelect($flight->dep, $booking->event->id)->toArray();
+                }
+                if ($flight->arr) {
+                    $arrBays = $cachedDataService->getBaysForSelect($flight->arr, $booking->event->id)->toArray();
+                }
+            }
+
+            return view('booking.admin.edit', compact('booking', 'airports', 'airlines', 'flight', 'depBays', 'arrBays'));
         }
         flashMessage('danger', __('Danger'), __('Booking can no longer be edited'));
         return back();
@@ -136,6 +170,12 @@ class BookingAdminController extends AdminController
 
     public function update(UpdateBooking $request, Booking $booking): RedirectResponse
     {
+        // Handle empty airline_id before processing
+        $data = $request->all();
+        if (isset($data['airline_id']) && $data['airline_id'] === '') {
+            $data['airline_id'] = null;
+        }
+
         $shouldSendEmail = false;
         if (!empty($booking->user) && $request->notify_user) {
             $shouldSendEmail = true;
@@ -146,6 +186,7 @@ class BookingAdminController extends AdminController
             'is_editable' => $request->is_editable,
             'callsign' => $request->callsign,
             'acType' => $request->acType,
+            'airline_id' => $data['airline_id'] ?? null,
             'final_information_email_sent_at' => null
         ]);
 
@@ -198,6 +239,16 @@ class BookingAdminController extends AdminController
         }
 
         $booking->save();
+
+        // Handle bay assignments for real flight ops events
+        if ($booking->event->event_type_id == \App\Enums\EventType::REALFLIGHTOPS->value) {
+            $bayAssignmentService = new BayAssignmentService();
+            $bayAssignmentService->applyBayAssignments($flight, $booking->event, [
+                'dep_bay' => $request->dep_bay === '' ? null : $request->dep_bay,
+                'arr_bay' => $request->arr_bay === '' ? null : $request->arr_bay
+            ]);
+        }
+
         $flight->save();
         if ($shouldSendEmail) {
             event(new BookingChanged($booking, $changes));
@@ -209,7 +260,7 @@ class BookingAdminController extends AdminController
     public function destroy(Booking $booking): RedirectResponse
     {
         if ($booking->event->endEvent >= now()) {
-            if (!empty($booking->user)) {
+            if (!empty($booking->user_id)) {
                 event(new BookingDeleted($booking->event, $booking->user));
             }
             $booking->delete();
@@ -241,11 +292,144 @@ class BookingAdminController extends AdminController
             ->by(auth()->user())
             ->on($event)
             ->log('Import triggered');
+
         $file = $request->file('file');
-        (new BookingsImport($event))->import($file);
-        Storage::delete($file->getRealPath());
+
+        // Store the file first before validation to ensure it's available
+        $tempPath = $file->store('temp');
+
+        // First, validate the file to check for invalid airlines and bays
+        $validationImport = new BookingsValidationImport($event);
+        $validationImport->validateFile(Storage::path($tempPath));
+
+        // Check if there are invalid airlines or bays
+        $hasInvalidAirlines = $validationImport->hasInvalidAirlines();
+        $hasInvalidBays = $validationImport->hasInvalidBays();
+
+        if ($hasInvalidAirlines || $hasInvalidBays) {
+            $warnings = [];
+
+            if ($hasInvalidAirlines) {
+                $invalidAirlines = $validationImport->getInvalidAirlines();
+                $airlineList = implode(', ', $invalidAirlines);
+                $warnings[] = __('Invalid airlines: ' . $airlineList);
+            }
+
+            if ($hasInvalidBays) {
+                $invalidBays = $validationImport->getInvalidBays();
+                $bayList = implode(', ', $invalidBays);
+                $warnings[] = __('Invalid bays: ' . $bayList);
+            }
+
+            // Store warnings and file path in session
+            session()->put([
+                'import_warnings' => $warnings,
+                'import_file_path' => $tempPath,
+                'invalid_airlines' => $hasInvalidAirlines ? $validationImport->getInvalidAirlines() : [],
+                'invalid_bays' => $hasInvalidBays ? $validationImport->getInvalidBays() : [],
+            ]);
+
+            $warningMessage = implode('. ', $warnings) . '. ' . __('Do you want to proceed with the import?');
+            flashMessage(
+                'warning',
+                __('Invalid Data Detected'),
+                $warningMessage
+            );
+
+            return to_route('admin.bookings.import.confirm', $event);
+        }
+
+        // No invalid data, proceed with import directly
+        $this->processImport(Storage::path($tempPath), $event);
+
+        // Clean up the temporary file
+        Storage::delete($tempPath);
+
         flashMessage('success', __('Flights imported'), __('Flights have been imported'));
         return to_route('bookings.event.index', $event);
+    }
+
+    /**
+     * Show confirmation page for invalid airlines
+     */
+    public function importConfirm(Event $event): View
+    {
+        $invalidAirlines = session('invalid_airlines', []);
+        $invalidBays = session('invalid_bays', []);
+        return view('event.admin.import-confirm', compact('event', 'invalidAirlines', 'invalidBays'));
+    }
+
+    /**
+     * Process the import after confirmation
+     */
+    public function importProcess(Request $request, Event $event): RedirectResponse
+    {
+        $tempPath = session('import_file_path');
+        $invalidAirlines = session('invalid_airlines', []);
+        $invalidBays = session('invalid_bays', []);
+
+        if (!$tempPath) {
+            flashMessage('error', __('Import Failed'), __('Import file path not found in session. Please try the import again.'));
+            return to_route('admin.bookings.importForm', $event);
+        }
+
+        // Check if the file actually exists
+        if (!Storage::exists($tempPath)) {
+            flashMessage('error', __('Import Failed'), __('Import file not found in storage. File path: ' . $tempPath . '. Please try again.'));
+            return to_route('admin.bookings.importForm', $event);
+        }
+
+        try {
+            // Get the full path to the stored file
+            $fullPath = Storage::path($tempPath);
+
+            // Process the import using the stored file
+            $import = new BookingsImport($event);
+            $import->import($fullPath);
+
+            // Clean up the temporary file
+            Storage::delete($tempPath);
+
+            // Clear session data
+            session()->forget(['invalid_airlines', 'invalid_bays', 'import_file_path', 'import_warnings']);
+
+            $warningMessages = [];
+            if (!empty($invalidAirlines)) {
+                $airlineList = implode(', ', $invalidAirlines);
+                $warningMessages[] = __('Airlines not recognized: ' . $airlineList . ' (set to "No airline")');
+            }
+            if (!empty($invalidBays)) {
+                $bayList = implode(', ', $invalidBays);
+                $warningMessages[] = __('Bays not recognized: ' . $bayList . ' (ignored)');
+            }
+
+            if (!empty($warningMessages)) {
+                $message = __('Import completed successfully. ') . implode('. ', $warningMessages) . '.';
+                flashMessage('success', __('Import Completed'), $message);
+            } else {
+                flashMessage('success', __('Flights imported'), __('Flights have been imported'));
+            }
+
+            return to_route('bookings.event.index', $event);
+
+        } catch (\Exception $e) {
+            // Clean up the temporary file on error
+            if (Storage::exists($tempPath)) {
+                Storage::delete($tempPath);
+            }
+
+            flashMessage('error', __('Import Failed'), __('An error occurred during import: ' . $e->getMessage()));
+            return to_route('admin.bookings.importForm', $event);
+        }
+    }
+
+    /**
+     * Process the actual import
+     */
+    private function processImport($filePath, Event $event): void
+    {
+        $import = new BookingsImport($event);
+        $import->import($filePath);
     }
 
     public function adminAutoAssignForm(Event $event): View

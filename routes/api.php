@@ -61,3 +61,5 @@ Route::get('/airports/{airport}', function (Airport $airport) {
 Route::get('/airports', function () {
     return new AirportsCollection(Airport::paginate());
 });
+
+Route::get('/bays/by-airport', [App\Http\Controllers\Api\BayController::class, 'getByAirport']);

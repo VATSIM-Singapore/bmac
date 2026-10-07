@@ -8,7 +8,7 @@ Thanks for booking a slot for the {{ $booking->event->name }} event. Here you ca
 Callsign: **{{ $booking->formatted_callsign }}**
 
 @component('mail::table')
-| FROM | TO | CTOT | ROUTE |
+| FROM | TO | STD | ROUTE |
 |----------------------------|:--------------------------:|:--------------------------:|:----:|
 @foreach ($booking->flights()->get() as $flight)
 | {{ $flight->airportDep->icao }} | {{ $flight->airportArr->icao }} | {{ $flight->formattedCtot }} | {{ $flight->route }}
@@ -21,5 +21,5 @@ We look forward to seeing you in the virtual skies, and wish you best of luck wi
 
 @lang('Regards'),
 
-**{{ config('mail.from.name', config('app.name')) }}**
+**The SINvACC Team**
 @endcomponent

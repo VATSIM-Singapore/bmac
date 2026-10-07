@@ -141,6 +141,11 @@ class Event extends Model
         return $this->belongsToMany(Faq::class);
     }
 
+    public function bayBlockings(): HasMany
+    {
+        return $this->hasMany(BayBlocking::class);
+    }
+
     public function sluggable(): array
     {
         return [
@@ -159,7 +164,8 @@ class Event extends Model
     {
         return in_array($this->event_type_id, [
             \App\Enums\EventType::FLYIN->value,
-            \App\Enums\EventType::GROUPFLIGHT->value
+            \App\Enums\EventType::GROUPFLIGHT->value,
+            \App\Enums\EventType::REALFLIGHTOPS->value
         ]);
     }
 }

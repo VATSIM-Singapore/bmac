@@ -35,6 +35,30 @@ Breadcrumbs::for('admin.airports.edit', function ($trail, $airport) {
     $trail->push('Edit Airport', route('admin.airports.edit', $airport));
 });
 
+// Home > Admin > Airports > Manage Bays
+Breadcrumbs::for('admin.airports.bays.index', function ($trail, $airport) {
+    $trail->parent('admin.airports.index');
+    $trail->push('Manage Bays', route('admin.airports.bays.index', $airport));
+});
+
+// Home > Admin > Airlines
+Breadcrumbs::for('admin.airlines.index', function ($trail) {
+    $trail->parent('admin');
+    $trail->push('Airlines', route('admin.airlines.index'));
+});
+
+// Home > Admin > Airlines > New
+Breadcrumbs::for('admin.airlines.create', function ($trail) {
+    $trail->parent('admin.airlines.index');
+    $trail->push('New', route('admin.airlines.create'));
+});
+
+// Home > Admin > Airlines > Edit Airline
+Breadcrumbs::for('admin.airlines.edit', function ($trail, $airline) {
+    $trail->parent('admin.airlines.index');
+    $trail->push('Edit Airline', route('admin.airlines.edit', $airline));
+});
+
 // Home > Admin > Airport Links
 Breadcrumbs::for('admin.airportLinks.index', function ($trail) {
     $trail->parent('admin');
@@ -101,6 +125,12 @@ Breadcrumbs::for('admin.events.email.form', function ($trail, $event) {
     $trail->push('Send E-mail', route('admin.events.email.form', $event));
 });
 
+// Home > Admin > Events > [Event] > Bay Management
+Breadcrumbs::for('admin.events.bay-management', function ($trail, $event) {
+    $trail->parent('admin.events.show', $event);
+    $trail->push('Bay Management', route('admin.events.bay-management', $event));
+});
+
 // Home (no event found)
 Breadcrumbs::for('bookings.index', function ($trail) {
     $trail->parent('home');
@@ -164,6 +194,12 @@ Breadcrumbs::for('admin.bookings.routeAssignForm', function ($trail, $event) {
 Breadcrumbs::for('faq', function ($trail) {
     $trail->parent('home');
     $trail->push('FAQ', route('faq'));
+});
+
+// Home > Admin > Users
+Breadcrumbs::for('admin.users.index', function ($trail) {
+    $trail->parent('admin');
+    $trail->push('Users', route('admin.users.index'));
 });
 
 // Home > Admin > FAQ

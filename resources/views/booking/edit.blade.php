@@ -15,7 +15,16 @@
                         @bind($booking)
                             @if (!$booking->is_editable)
                                 <x-form-group :label="__('Callsign')">
-                                    <strong>{{ $booking->formatted_callsign }}</strong>
+                                    <strong>
+                                        {{ $booking->formatted_callsign }}
+                                        @if($booking->airline && $booking->airline->callsign && $booking->callsign)
+                                            @php
+                                                // Extract flight number from callsign (remove airline ICAO code)
+                                                $flightNumber = preg_replace('/^' . preg_quote($booking->airline->icao, '/') . '/', '', $booking->callsign);
+                                            @endphp
+                                            ({{ $booking->airline->callsign }} {{ $flightNumber }})
+                                        @endif
+                                    </strong>
                                 </x-form-group>
                                 <x-form-group :label="__('Aircraft code')">
                                     <strong>{{ $booking->formatted_actype }}</strong>
@@ -23,18 +32,20 @@
                             @else
                                 <x-form-input name="callsign" :label="__('Callsign')" required maxlength="7" />
                                 <x-form-input name="acType" :label="__('Aircraft code')" required minlength="3" maxlength="4" />
+
+                                <x-form-select name="airline_id" :label="__('Airline (optional)')" :options="$airlines" :placeholder="__('Choose airline...')" :value="$booking->airline_id" />
                             @endif
 
                             @bind($flight)
                                 @if ($booking->event->uses_times)
                                     @if ($flight->ctot)
-                                        <x-form-group :label="__('CTOT')">
+                                        <x-form-group :label="__('STD')">
                                             <strong>{{ $flight->formatted_ctot }}</strong>
                                         </x-form-group>
                                     @endif
 
                                     @if ($flight->eta)
-                                        <x-form-group :label="__('ETA')">
+                                        <x-form-group :label="__('STA')">
                                             <strong>{{ $flight->formatted_eta }}</strong>
                                         </x-form-group>
                                     @endif
@@ -47,10 +58,22 @@
                                     </x-form-group>
                                 @endif
 
+                                @if ($flight->depBay)
+                                    <x-form-group :label="__('Departure Bay')">
+                                        <strong>{{ $flight->depBay->name }}</strong>
+                                    </x-form-group>
+                                @endif
+
                                 @if ($flight->arr)
                                     <x-form-group :label="__('ADES')">
                                         <strong>{{ $flight->airportArr->icao }} - {{ $flight->airportArr->name }} -
                                             {{ $flight->airportArr->iata }}</strong>
+                                    </x-form-group>
+                                @endif
+
+                                @if ($flight->arrBay)
+                                    <x-form-group :label="__('Arrival Bay')">
+                                        <strong>{{ $flight->arrBay->name }}</strong>
                                     </x-form-group>
                                 @endif
 

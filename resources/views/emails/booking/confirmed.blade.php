@@ -3,7 +3,13 @@
 
 Dear **{{ $booking->user->full_name }}**,
 
-Thank you for your recent booking for **{{ $booking->event->name }}** event.
+Thank you for your recent booking for **{{ $booking->event->name }}**.
+
+Find pilot briefings & charts for Singapore Changi Airport <a href="https://drive.google.com/drive/folders/1_r5dJTcfomUQDUSAG-TNN_CunZpdnJnq">here</a>!
+Looking for sceneries? Find them <a href="https://drive.google.com/drive/folders/1_r5dJTcfomUQDUSAG-TNN_CunZpdnJnq">here</a>!
+
+Questions? Ask us on the SINvACC Discord Server, or email us <a href="mailto:realops@sinvacc.org">realops@sinvacc.org</a>
+
 For reference, your booking details are listed below.
 
 @component('mail::table')
@@ -17,13 +23,22 @@ For reference, your booking details are listed below.
 | Event Date: | **{{ $booking->event->startEvent->toFormattedDateString() }}** |
 @else
 |-----------|---------------------------|
-| Callsign: | **{{ $booking->callsign }}** |
+| Callsign: | **{{ $booking->callsign }}@if($booking->airline && $booking->airline->callsign && $booking->callsign)
+@php
+    $flightNumber = preg_replace('/^' . preg_quote($booking->airline->icao, '/') . '/', '', $booking->callsign);
+@endphp ({{ $booking->airline->callsign }} {{ $flightNumber }})@endif** |
 | Aircraft: | **{{ $booking->acType }}** |
 @if($booking->flights()->first()->dep)
 | Departs: | **{{ $booking->flights()->first()->airportDep->icao  }}** |
 @endif
+@if($booking->flights()->first()->depBay)
+| Departure Bay: | **{{ $booking->flights()->first()->depBay->name }}** |
+@endif
 @if($booking->flights()->first()->arr)
 | Arrives: | **{{ $booking->flights()->first()->airportArr->icao }}** |
+@endif
+@if($booking->flights()->first()->arrBay)
+| Arrival Bay: | **{{ $booking->flights()->first()->arrBay->name }}** |
 @endif
 @if($booking->event->is_oceanic_event)
 | Cruising: | **{{ $booking->flights()->first()->formatted_oceanicfl }}** |
@@ -36,7 +51,8 @@ For reference, your booking details are listed below.
 | Notes: | **{{ $booking->flights()->first()->formatted_notes }}** |
 @endif
 @if($booking->event->uses_times)
-| CTOT: | **{{ $booking->flights()->first()->formattedCtot }}** |
+| STD: | **{{ $booking->flights()->first()->formattedCtot }}** |
+| STA: | **{{ $booking->flights()->first()->formattedEta }}** |
 @endif
 | Event Date: | **{{ $booking->event->startEvent->toFormattedDateString() }}** |
 @endif
@@ -44,5 +60,5 @@ For reference, your booking details are listed below.
 
 @lang('Regards'),
 
-**{{ config('mail.from.name', config('app.name')) }}**
+**The SINvACC Team**
 @endcomponent

@@ -97,6 +97,11 @@ class Airport extends Model
         return $this->hasMany(AirportLink::class);
     }
 
+    public function bays(): HasMany
+    {
+        return $this->hasMany(Bay::class);
+    }
+
     public function setIcaoAttribute($value): void
     {
         $this->attributes['icao'] = strtoupper($value);

@@ -16,6 +16,7 @@ class UpdateBooking extends Request
         return [
             'callsign' => 'sometimes|alpha_num|between:4,7|unique:bookings,callsign,' . auth()->id() . ',user_id,event_id,' . $this->route('booking')->event->id,
             'acType' => 'sometimes|alpha_num|between:3,4',
+            'airline_id' => 'sometimes|nullable|exists:airlines,id',
             'selcal1' => 'sometimes|nullable|alpha|size:2',
             'selcal2' => 'sometimes|nullable|required_with:selcal1,!=' . null . '|alpha|size:2',
             'checkStudy' => 'sometimes|accepted',
@@ -46,10 +47,12 @@ class UpdateBooking extends Request
         return [
             'callsign' => __('Callsign'),
             'acType' => __('Aircraft code'),
+            'airline_id' => __('Airline'),
             'selcal1' => __('SELCAL'),
             'selcal2' => __('SELCAL'),
             'checkStudy' => __('Briefing material'),
             'checkCharts' => __('Charts'),
         ];
     }
+
 }
